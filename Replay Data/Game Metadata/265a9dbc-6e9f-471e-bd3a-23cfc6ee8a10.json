@@ -1,0 +1,120 @@
+{
+  "match_id": "7509D5544C8C758291596D942A061644",
+  "match_guid": "E6F71CB211F14290F36D7E8195A970F4",
+  "date": "2026-04-27 19-36-24",
+  "map_name": "stadium_day_p",
+  "match_type": "Online",
+  "team_scores": {
+    "BLUE": 4,
+    "ORANGE": 3
+  },
+  "BLUE_TEAM": [
+    "neon_matrix46",
+    "neon_matrix46(1)",
+    "neon_matrix46(2)"
+  ],
+  "ORANGE_TEAM": [
+    "Thunder",
+    "tkxanny",
+    "Cha"
+  ],
+  "goals": [
+    {
+      "frame": 600,
+      "player_name": "neon_matrix46(2)",
+      "team": "BLUE"
+    },
+    {
+      "frame": 2939,
+      "player_name": "neon_matrix46(2)",
+      "team": "BLUE"
+    },
+    {
+      "frame": 3414,
+      "player_name": "Cha",
+      "team": "ORANGE"
+    },
+    {
+      "frame": 4130,
+      "player_name": "Cha",
+      "team": "ORANGE"
+    },
+    {
+      "frame": 5357,
+      "player_name": "neon_matrix46(2)",
+      "team": "BLUE"
+    },
+    {
+      "frame": 6830,
+      "player_name": "neon_matrix46(2)",
+      "team": "BLUE"
+    },
+    {
+      "frame": 8710,
+      "player_name": "Cha",
+      "team": "ORANGE"
+    }
+  ],
+  "player_stats": [
+    {
+      "name": "Thunder",
+      "team": "ORANGE",
+      "score": 224,
+      "goals": 0,
+      "assists": 0,
+      "saves": 2,
+      "shots": 0,
+      "bBot": false
+    },
+    {
+      "name": "tkxanny",
+      "team": "ORANGE",
+      "score": 290,
+      "goals": 0,
+      "assists": 1,
+      "saves": 2,
+      "shots": 0,
+      "bBot": false
+    },
+    {
+      "name": "Cha",
+      "team": "ORANGE",
+      "score": 786,
+      "goals": 3,
+      "assists": 0,
+      "saves": 3,
+      "shots": 3,
+      "bBot": false
+    },
+    {
+      "name": "neon_matrix46",
+      "team": "BLUE",
+      "score": 202,
+      "goals": 0,
+      "assists": 2,
+      "saves": 0,
+      "shots": 2,
+      "bBot": false
+    },
+    {
+      "name": "neon_matrix46(1)",
+      "team": "BLUE",
+      "score": 278,
+      "goals": 0,
+      "assists": 1,
+      "saves": 0,
+      "shots": 6,
+      "bBot": false
+    },
+    {
+      "name": "neon_matrix46(2)",
+      "team": "BLUE",
+      "score": 669,
+      "goals": 4,
+      "assists": 0,
+      "saves": 1,
+      "shots": 4,
+      "bBot": false
+    }
+  ]
+}
