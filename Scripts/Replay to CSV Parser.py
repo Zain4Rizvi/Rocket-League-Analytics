@@ -15,7 +15,11 @@ BASE_DIR = SCRIPT_DIR  # Adjust if your base directory is a parent folder
 REPLAY_FOLDER = BASE_DIR / "Replay Data" / "Raw Replays"
 PARSED_CSV_FOLDER = BASE_DIR / "Replay Data" / "Parsed CSVs"
 GAME_METADATA_FOLDER = BASE_DIR / "Replay Data" / "Game Metadata"
-RROCKET_EXE = BASE_DIR / "Scripts" / "rrrocket.exe"
+RROCKET_EXE = (
+    BASE_DIR / "Scripts" / "rrrocket.exe"
+    if sys.platform == "win32"
+    else BASE_DIR / "Scripts" / "rrrocket"
+)
 
 # Filtering threshold
 MIN_PLAYER_ROWS = 100
