@@ -13,15 +13,16 @@ Usage:
     python run_pipeline.py
 """
 
-import sys
+import argparse
 import subprocess
+import sys
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 PARSER_SCRIPT = SCRIPT_DIR / "Replay to CSV Parser.py"
 VISUALIZER_SCRIPT = SCRIPT_DIR / "rl_replay_3d.py"
 
-def run_pipeline(replay_filename=None):
+def run_pipeline(replay_filename=None, output_filename=None):
     print("=" * 60)
     print("STARTING ROCKET LEAGUE REPLAY PIPELINE")
     print("=" * 60)
@@ -33,29 +34,33 @@ def run_pipeline(replay_filename=None):
 
     print(f"\n[1/2] Running Replay to CSV Parser...")
     print(f"Command: {' '.join(cmd_parser)}")
-    res1 = subprocess.run(cmd_parser)
+    res1 = subprocess.run(cmd_parser, check=False)
 
     if res1.returncode != 0:
-        print(f"\n[!] Parser step failed with return code {res1.returncode}. Aborting pipeline.")
-        sys.exit(res1.returncode)
+        raise RuntimeError(
+            f"Parser step failed with return code {res1.returncode}."
+        )
 
     print("\n[+] Parser step completed successfully.")
 
-# Step 2: Run 3D Visualizer
+    # Step 2: Run 3D Visualizer
     cmd_vis = [sys.executable, str(VISUALIZER_SCRIPT)]
 
     if replay_filename:
         csv_filename = f"{Path(replay_filename).stem}.csv"
         cmd_vis.extend(["-i", csv_filename])
+    if output_filename:
+        cmd_vis.extend(["-o", str(output_filename)])
 
     print(f"\n[2/2] Running 3D Visualizer (rl_replay_3d.py)...")
     print(f"Command: {' '.join(cmd_vis)}")
 
-    res2 = subprocess.run(cmd_vis)
+    res2 = subprocess.run(cmd_vis, check=False)
 
     if res2.returncode != 0:
-        print(f"\n[!] Visualization step failed with return code {res2.returncode}.")
-        sys.exit(res2.returncode)
+        raise RuntimeError(
+            f"Visualization step failed with return code {res2.returncode}."
+        )
 
     print("\n[+] 3D Visualization generated successfully!")
     print("=" * 60)
@@ -63,5 +68,13 @@ def run_pipeline(replay_filename=None):
     print("=" * 60)
 
 if __name__ == "__main__":
-    replay_file = sys.argv[1] if len(sys.argv) > 1 else None
-    run_pipeline(replay_file)
+    parser = argparse.ArgumentParser(description="Process a Rocket League replay.")
+    parser.add_argument("-i", "--input", help="Replay filename or path.")
+    parser.add_argument("-o", "--output", help="Generated HTML filename or path.")
+    args = parser.parse_args()
+
+    try:
+        run_pipeline(args.input, args.output)
+    except RuntimeError as error:
+        print(f"\n[!] {error}")
+        raise SystemExit(1) from error

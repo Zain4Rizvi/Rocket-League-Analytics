@@ -1216,6 +1216,11 @@ def main():
         default=30,
         help="Resampling FPS",
     )
+    parser.add_argument(
+        "-o",
+        "--output",
+        help="Output HTML path. Defaults to Replay Data/Replay HTMLs/<input>.html.",
+    )
     args = parser.parse_args()
 
     if args.input:
@@ -1239,8 +1244,13 @@ def main():
         return
 
     # HTML has the same filename as the CSV/JSON, but with .html
-    output_dir = BASE_DIR / "Replay Data" / "Replay HTMLs"
-    output_path = output_dir / f"{csv_path.stem}.html"
+    output_path = (
+        Path(args.output)
+        if args.output
+        else BASE_DIR / "Replay Data" / "Replay HTMLs" / f"{csv_path.stem}.html"
+    )
+    if not output_path.is_absolute():
+        output_path = BASE_DIR / output_path
 
     print(f"Loading CSV: {csv_path}...")
     print(f"Loading team setup: {json_path}...")

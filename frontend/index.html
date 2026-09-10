@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Replay Lab</title>
+  <style>
+    :root {
+      --ink: #e7edf2;
+      --muted: #8c9aa5;
+      --night: #080d12;
+      --panel: #101820;
+      --line: #263541;
+      --accent: #ff7138;
+      --accent-dark: #bd4524;
+      --blue: #4ca6d5;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { min-height: 100%; }
+    body {
+      margin: 0;
+      height: 100vh;
+      overflow: hidden;
+      color: var(--ink);
+      background: radial-gradient(circle at 72% -20%, #1b3d50 0, transparent 42%), var(--night);
+      font-family: "Segoe UI", Tahoma, sans-serif;
+    }
+    .shell { height: 100vh; display: flex; flex-direction: column; max-width: 1600px; margin: 0 auto; padding: 0 24px 20px; }
+    header { height: 68px; flex: 0 0 68px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--line); }
+    .wordmark { color: #fff; font-size: 16px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; }
+    .tagline { color: var(--muted); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; }
+    .intro { display: flex; align-items: baseline; justify-content: space-between; gap: 24px; padding: 24px 0 18px; }
+    h1 { margin: 0; color: #fff; font-size: clamp(24px, 3vw, 38px); line-height: 1; font-weight: 600; letter-spacing: -0.03em; }
+    .intro p { max-width: 520px; margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; text-align: right; }
+    .workspace { min-height: 0; flex: 1; display: flex; flex-direction: column; gap: 12px; }
+    .upload-panel { flex: 0 0 auto; display: flex; align-items: center; gap: 16px; padding: 10px 14px; background: rgba(16, 24, 32, .92); border: 1px solid var(--line); }
+    .drop-zone { min-height: 42px; display: flex; align-items: center; gap: 12px; flex: 0 0 auto; padding: 0 16px; border: 1px dashed #486071; background: #15212b; cursor: pointer; transition: border-color .2s, background .2s; }
+    .drop-zone:hover, .drop-zone.is-over { border-color: var(--accent); background: #25232a; }
+    .drop-zone strong { font-size: 13px; font-weight: 600; }
+    .drop-zone span { color: var(--muted); font-size: 12px; }
+    input[type=file] { display: none; }
+    .status { min-height: 18px; margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+    .status.error { color: #a32620; }
+    .status.success { color: #70c995; }
+    .viewer { min-height: 0; flex: 1; background: #05090d; border: 1px solid var(--line); position: relative; overflow: hidden; box-shadow: 0 12px 40px rgba(0, 0, 0, .28); }
+    .viewer.empty { display: grid; place-items: center; padding: 40px; color: #71818c; text-align: center; font-size: 14px; }
+    iframe { width: 100%; height: 100%; display: block; border: 0; }
+    .loading { color: var(--accent); }
+    @media (max-width: 760px) {
+      .shell { padding: 0 12px 12px; }
+      header { height: 56px; flex-basis: 56px; }
+      .tagline { display: none; }
+      .intro { display: block; padding: 18px 0 14px; }
+      .intro p { margin-top: 8px; text-align: left; }
+      .upload-panel { align-items: stretch; flex-direction: column; gap: 8px; padding: 10px; }
+      .drop-zone { justify-content: center; min-height: 38px; }
+      .status { text-align: center; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <div class="wordmark">Replay Lab</div>
+      <div class="tagline">Rocket League match playback</div>
+    </header>
+    <section class="intro">
+      <h1>Turn a replay into a match you can inspect.</h1>
+      <p>Drop a replay below to prepare its telemetry and open the interactive 3D simulation.</p>
+    </section>
+    <section class="workspace">
+      <div class="upload-panel">
+        <label class="drop-zone" id="dropZone" for="replayInput">
+          <strong>Load replay</strong>
+          <span>Drop a .replay file or click to browse</span>
+        </label>
+        <input id="replayInput" type="file" accept=".replay">
+        <p class="status" id="status">Ready for a replay.</p>
+      </div>
+      <div class="viewer empty" id="viewer">Your simulation will appear here after processing.</div>
+    </section>
+  </main>
+  <script>
+    const dropZone = document.getElementById("dropZone");
+    const input = document.getElementById("replayInput");
+    const status = document.getElementById("status");
+    const viewer = document.getElementById("viewer");
+
+    function setStatus(message, type = "") {
+      status.textContent = message;
+      status.className = `status ${type}`;
+    }
+
+    async function upload(file) {
+      if (!file || !file.name.toLowerCase().endsWith(".replay")) {
+        setStatus("Choose a .replay file.", "error");
+        return;
+      }
+      const form = new FormData();
+      form.append("replay", file);
+      dropZone.classList.remove("is-over");
+      setStatus("Processing replay... this can take a moment.", "loading");
+      viewer.className = "viewer empty";
+      viewer.textContent = "Building the interactive simulation...";
+      try {
+        const response = await fetch("/api/upload", { method: "POST", body: form });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.details || result.error || "Upload failed.");
+        setStatus(`${file.name} is ready.`, "success");
+        viewer.className = "viewer";
+        viewer.innerHTML = `<iframe title="Rocket League replay simulation" src="${result.simulationUrl}"></iframe>`;
+      } catch (error) {
+        setStatus(error.message, "error");
+        viewer.className = "viewer empty";
+        viewer.textContent = "The simulation could not be generated.";
+      }
+    }
+
+    input.addEventListener("change", () => upload(input.files[0]));
+    ["dragenter", "dragover"].forEach(eventName => dropZone.addEventListener(eventName, event => {
+      event.preventDefault();
+      dropZone.classList.add("is-over");
+    }));
+    ["dragleave", "drop"].forEach(eventName => dropZone.addEventListener(eventName, event => {
+      event.preventDefault();
+      dropZone.classList.remove("is-over");
+    }));
+    dropZone.addEventListener("drop", event => upload(event.dataTransfer.files[0]));
+  </script>
+</body>
+</html>
