@@ -1219,7 +1219,7 @@ def main():
     args = parser.parse_args()
 
     if args.input:
-        csv_path = Path(args.input)
+        csv_path = REPLAY_DATA_DIR / Path(args.input).name
     else:
         try:
             csv_path = find_default_csv()
