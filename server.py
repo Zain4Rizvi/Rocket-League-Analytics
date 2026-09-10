@@ -15,6 +15,7 @@ SCRIPTS_DIR = BASE_DIR / "Scripts"
 RAW_REPLAYS_DIR = BASE_DIR / "Replay Data" / "Raw Replays"
 HTML_DIR = BASE_DIR / "Replay Data" / "Replay HTMLs"
 FRONTEND_DIR = BASE_DIR / "frontend"
+EXAMPLE_HTML = BASE_DIR / "examples" / "example-replay.html"
 MAX_UPLOAD_BYTES = 500 * 1024 * 1024
 
 
@@ -38,6 +39,10 @@ class ReplayServer(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         if parsed.path == "/":
             self.serve_file(FRONTEND_DIR / "index.html", "text/html; charset=utf-8")
+            return
+
+        if parsed.path == "/example":
+            self.serve_file(EXAMPLE_HTML, "text/html; charset=utf-8")
             return
 
         if parsed.path.startswith("/simulation/"):

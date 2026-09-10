@@ -39,6 +39,8 @@
     .drop-zone:hover, .drop-zone.is-over { border-color: var(--accent); background: #25232a; }
     .drop-zone strong { font-size: 13px; font-weight: 600; }
     .drop-zone span { color: var(--muted); font-size: 12px; }
+    .example-button { min-height: 42px; padding: 0 16px; color: var(--ink); background: transparent; border: 1px solid #486071; font: inherit; font-size: 12px; cursor: pointer; transition: border-color .2s, color .2s, background .2s; }
+    .example-button:hover { color: #fff; border-color: var(--accent); background: rgba(255, 113, 56, .12); }
     input[type=file] { display: none; }
     .status { min-height: 18px; margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
     .status.error { color: #a32620; }
@@ -76,6 +78,7 @@
           <span>Drop a .replay file or click to browse</span>
         </label>
         <input id="replayInput" type="file" accept=".replay">
+        <button class="example-button" id="exampleButton" type="button">View example</button>
         <p class="status" id="status">Ready for a replay.</p>
       </div>
       <div class="viewer empty" id="viewer">Your simulation will appear here after processing.</div>
@@ -84,8 +87,14 @@
   <script>
     const dropZone = document.getElementById("dropZone");
     const input = document.getElementById("replayInput");
+    const exampleButton = document.getElementById("exampleButton");
     const status = document.getElementById("status");
     const viewer = document.getElementById("viewer");
+
+    function showSimulation(url) {
+      viewer.className = "viewer";
+      viewer.innerHTML = `<iframe title="Rocket League replay simulation" src="${url}"></iframe>`;
+    }
 
     function setStatus(message, type = "") {
       status.textContent = message;
@@ -108,14 +117,18 @@
         const result = await response.json();
         if (!response.ok) throw new Error(result.details || result.error || "Upload failed.");
         setStatus(`${file.name} is ready.`, "success");
-        viewer.className = "viewer";
-        viewer.innerHTML = `<iframe title="Rocket League replay simulation" src="${result.simulationUrl}"></iframe>`;
+        showSimulation(result.simulationUrl);
       } catch (error) {
         setStatus(error.message, "error");
         viewer.className = "viewer empty";
         viewer.textContent = "The simulation could not be generated.";
       }
     }
+
+    exampleButton.addEventListener("click", () => {
+      setStatus("Showing example replay.", "success");
+      showSimulation("/example");
+    });
 
     input.addEventListener("change", () => upload(input.files[0]));
     ["dragenter", "dragover"].forEach(eventName => dropZone.addEventListener(eventName, event => {
