@@ -163,7 +163,7 @@ def resample_entity(sub, grid):
     fb = None
     if "boost" in sub.columns and sub["boost"].notna().any():
         b = sub["boost"].ffill().bfill().to_numpy()
-        fb = np.interp(grid, t, b, left=b[0], right=b[-1])
+        fb = np.interp(grid, t, b, left=b[0], right=b[-1]) / 255.0 * 100.0
 
     return fx, fy, fz, fb
 
@@ -190,7 +190,107 @@ def round_list(arr, ndigits=1):
     return [round(float(v), ndigits) for v in arr]
 
 
-def build_payload(df, fps):
+def moving_average(values, window):
+    return pd.Series(values).rolling(window, min_periods=1, center=True).mean().to_numpy()
+
+
+def build_coaching_analytics(entities, grid, fps, metadata=None):
+    ball = next((entry for entry in entities if entry["type"] == "ball"), None)
+    players = [entry for entry in entities if entry["type"] == "car"]
+    frame_count = len(grid)
+    if ball is None or not players:
+        return {"series": {}, "players": {}, "events": [], "recommendations": []}
+
+    ball_x = np.asarray(ball["x"], dtype=float)
+    ball_y = np.asarray(ball["y"], dtype=float)
+    ball_speed = np.hypot(np.gradient(ball_x, 1.0 / fps), np.gradient(ball_y, 1.0 / fps))
+    half_length = FIELD_LENGTH / 2.0
+    team_state = {
+        "orange": {"threat": np.zeros(frame_count), "momentum": np.zeros(frame_count), "control": np.zeros(frame_count)},
+        "blue": {"threat": np.zeros(frame_count), "momentum": np.zeros(frame_count), "control": np.zeros(frame_count)},
+    }
+    player_series = {}
+
+    for player in players:
+        x = np.asarray(player["x"], dtype=float)
+        y = np.asarray(player["y"], dtype=float)
+        speed = np.hypot(np.gradient(x, 1.0 / fps), np.gradient(y, 1.0 / fps))
+        boost = np.asarray(player.get("boost") or [50.0] * frame_count, dtype=float)
+        team = player.get("team") or "orange"
+        attack_direction = 1.0 if team == "orange" else -1.0
+        distance_to_ball = np.hypot(x - ball_x, y - ball_y)
+        proximity = np.exp(-distance_to_ball / 1800.0)
+        progress = np.clip(attack_direction * y / half_length, -1.0, 1.0)
+        forward_speed = np.clip(attack_direction * np.gradient(y, 1.0 / fps) / 2300.0, -1.0, 1.0)
+        pressure = np.clip(0.42 * proximity + 0.25 * np.clip(speed / 2300.0, 0, 1) + 0.20 * ((forward_speed + 1) / 2) + 0.13 * boost / 100, 0, 1)
+        contribution = 100.0 * pressure
+        player_series[player["name"]] = {
+            "team": team,
+            "impact": round_list(moving_average(contribution, max(3, int(fps * 0.5))), 1),
+            "boostAverage": round(float(np.mean(boost)), 1),
+            "lowBoostPct": round(float(np.mean(boost < 25) * 100), 1),
+            "speedAverage": round(float(np.mean(speed)), 1),
+            "ballProximityPct": round(float(np.mean(proximity > 0.45) * 100), 1),
+            "attackBias": round(float(np.mean(progress) * 100), 1),
+            "impactPeak": round(float(np.max(contribution)), 1),
+        }
+        team_state[team]["momentum"] += 0.55 * progress + 0.25 * forward_speed + 0.20 * proximity
+        team_state[team]["control"] += proximity
+
+    goal_distance = np.abs(half_length - np.abs(ball_y))
+    centrality = np.exp(-np.abs(ball_x) / 2200.0)
+    approach = np.clip(ball_speed / 2300.0, 0, 1)
+    threat = np.clip((1 - goal_distance / half_length) * 0.60 + centrality * 0.25 + approach * 0.15, 0, 1)
+    team_state["orange"]["threat"] = threat * np.clip(ball_y / 1200.0, 0, 1) * 100
+    team_state["blue"]["threat"] = threat * np.clip(-ball_y / 1200.0, 0, 1) * 100
+
+    orange_momentum = 50 + 50 * np.tanh(team_state["orange"]["momentum"] / max(1, len(ORANGE_TEAM)) * 1.5)
+    blue_momentum = 50 + 50 * np.tanh(team_state["blue"]["momentum"] / max(1, len(BLUE_TEAM)) * 1.5)
+    total_control = team_state["orange"]["control"] + team_state["blue"]["control"] + 1e-6
+    orange_control = team_state["orange"]["control"] / total_control * 100
+    blue_control = team_state["blue"]["control"] / total_control * 100
+    smooth_short = max(3, int(fps * 0.3))
+    series = {
+        "orangeThreat": round_list(moving_average(team_state["orange"]["threat"], smooth_short), 1),
+        "blueThreat": round_list(moving_average(team_state["blue"]["threat"], smooth_short), 1),
+        "orangeMomentum": round_list(moving_average(orange_momentum, max(3, int(fps * 0.8))), 1),
+        "blueMomentum": round_list(moving_average(blue_momentum, max(3, int(fps * 0.8))), 1),
+        "orangeControl": round_list(orange_control, 1),
+        "blueControl": round_list(blue_control, 1),
+    }
+
+    events = []
+    sample_step = max(1, int(fps * 0.5))
+    threat_gap = np.abs(team_state["orange"]["threat"] - team_state["blue"]["threat"])
+    for frame in range(sample_step, frame_count - sample_step, sample_step):
+        local_start = max(0, frame - sample_step)
+        local_end = min(frame_count, frame + sample_step)
+        if threat_gap[frame] >= 42 and threat_gap[frame] == np.max(threat_gap[local_start:local_end]):
+            team = "ORANGE" if team_state["orange"]["threat"][frame] > team_state["blue"]["threat"][frame] else "BLUE"
+            events.append({"frame": frame, "time": round(float(grid[frame] - grid[0]), 1), "kind": "THREAT", "team": team, "title": f"{team} high-threat window", "detail": f"Goal threat reached {max(team_state['orange']['threat'][frame], team_state['blue']['threat'][frame]):.0f}/100."})
+        if ball_speed[frame] > 2100 and ball_speed[frame] == np.max(ball_speed[local_start:local_end]):
+            events.append({"frame": frame, "time": round(float(grid[frame] - grid[0]), 1), "kind": "TRANSITION", "team": "NEUTRAL", "title": "Fast transition", "detail": f"Ball speed peaked at {ball_speed[frame] / 100:.0f} km/h proxy."})
+
+    if metadata:
+        for goal in metadata.get("goals", []):
+            goal_time = float(goal.get("frame") or 0) / 30.0 - float(grid[0])
+            goal_frame = min(frame_count - 1, max(0, int(np.searchsorted(grid - grid[0], goal_time))))
+            events.append({"frame": goal_frame, "time": round(float(grid[goal_frame] - grid[0]), 1), "kind": "GOAL", "team": goal.get("team", "NEUTRAL"), "title": f"{goal.get('team', 'TEAM')} goal", "detail": f"Scored by {goal.get('player_name', 'unknown player')}."})
+    events = sorted(events, key=lambda event: event["frame"])
+
+    recommendations = []
+    for name, report in sorted(player_series.items(), key=lambda item: item[1]["impactPeak"], reverse=True):
+        if report["lowBoostPct"] >= 35:
+            recommendations.append({"player": name, "priority": "HIGH", "title": "Boost economy", "detail": f"Low boost for {report['lowBoostPct']:.0f}% of tracked time; review retreat timing and pad routes."})
+        elif report["ballProximityPct"] < 12:
+            recommendations.append({"player": name, "priority": "MED", "title": "Connection to play", "detail": "Frequently far from the ball; inspect spacing and support distances in the event timeline."})
+    if not recommendations:
+        recommendations.append({"player": "TEAM", "priority": "INFO", "title": "Balanced shape", "detail": "No major automated alert crossed the coaching thresholds in this replay."})
+
+    return {"series": series, "players": player_series, "events": events[:80], "recommendations": recommendations[:12]}
+
+
+def build_payload(df, fps, metadata=None):
     t_min = df["time"].min()
     t_max = df["time"].max()
     dt = 1.0 / fps
@@ -257,6 +357,7 @@ def build_payload(df, fps):
                 "goalY": -FIELD_LENGTH / 2,
             },
         },
+        "analytics": build_coaching_analytics(payload_entities, grid, fps, metadata),
         "entities": payload_entities,
     }
 
@@ -398,6 +499,74 @@ html, body {
     max-width: 210px;
     line-height: 1.4;
 }
+
+#coachPanel {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: 6;
+    width: 300px;
+    max-height: calc(100vh - 100px);
+    overflow: auto;
+    color: #e8edf2;
+    background: rgba(8, 13, 18, 0.86);
+    border: 1px solid rgba(130, 157, 177, 0.28);
+    border-radius: 12px;
+    padding: 13px;
+    font-size: 11px;
+    backdrop-filter: blur(12px);
+    box-shadow: 0 18px 50px rgba(0, 0, 0, .3);
+}
+
+#coachPanel .panel-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+#coachPanel .eyebrow { color: #8fa8b8; font-size: 9px; letter-spacing: .16em; text-transform: uppercase; }
+#coachPanel .live-dot { color: #73e0a0; font-size: 10px; }
+#coachPanel .signal { margin: 8px 0 10px; padding: 8px; background: rgba(255,255,255,.045); border-left: 3px solid #ff7a00; }
+#coachPanel .signal strong { display: block; color: #fff; font-size: 13px; margin-bottom: 2px; }
+#coachPanel .metric { margin: 8px 0; }
+#coachPanel .metric-line { display: flex; justify-content: space-between; color: #a9b8c2; margin-bottom: 4px; }
+#coachPanel .metric-line b { color: #f4f7f9; font-variant-numeric: tabular-nums; }
+#coachPanel .bar { height: 5px; display: flex; gap: 2px; background: #202a33; }
+#coachPanel .bar i { display: block; height: 100%; transition: width .12s linear; }
+#coachPanel .orange { background: #ff7a00; }
+#coachPanel .blue { background: #4ca6d5; }
+#coachPanel .section-title { color: #8fa8b8; font-size: 9px; letter-spacing: .13em; text-transform: uppercase; margin: 13px 0 6px; }
+#trendChart { width: 100%; height: 72px; display: block; background: rgba(255,255,255,.025); border: 1px solid rgba(130,157,177,.16); }
+#playerSelect { width: 100%; padding: 6px; color: #edf3f6; background: #16212a; border: 1px solid #3b505f; border-radius: 5px; }
+#playerReport { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-top: 7px; }
+#playerReport div { padding: 6px; background: rgba(255,255,255,.045); }
+#playerReport span { display: block; color: #8fa8b8; font-size: 9px; }
+#playerReport b { color: #fff; font-size: 12px; }
+#recommendations { color: #c8d4db; line-height: 1.35; }
+#recommendations .rec { padding: 7px 0; border-top: 1px solid rgba(130,157,177,.16); }
+#recommendations .priority { color: #ffb36e; font-size: 9px; letter-spacing: .1em; }
+
+#eventRail {
+    position: absolute;
+    left: 12px;
+    bottom: 76px;
+    z-index: 6;
+    width: min(360px, calc(100vw - 24px));
+    max-height: 180px;
+    overflow: auto;
+    padding: 10px;
+    color: #e8edf2;
+    background: rgba(8, 13, 18, .82);
+    border: 1px solid rgba(130,157,177,.25);
+    border-radius: 10px;
+    backdrop-filter: blur(10px);
+}
+#eventRail .rail-title { color: #8fa8b8; font-size: 9px; letter-spacing: .15em; text-transform: uppercase; margin-bottom: 6px; }
+#eventList button { width: 100%; display: grid; grid-template-columns: 44px 1fr; gap: 8px; padding: 6px 4px; color: #dce6eb; text-align: left; background: transparent; border: 0; border-top: 1px solid rgba(130,157,177,.14); cursor: pointer; }
+#eventList button:hover { background: rgba(255,255,255,.07); }
+#eventList time { color: #ffad68; font-variant-numeric: tabular-nums; }
+#eventList small { display: block; color: #8296a3; margin-top: 2px; }
+
+@media (max-width: 760px) {
+    #coachPanel { top: 8px; right: 8px; width: min(270px, calc(100vw - 16px)); max-height: 46vh; }
+    #eventRail { left: 8px; bottom: 70px; max-height: 130px; }
+    #hint { display: none; }
+}
 </style>
 </head>
 
@@ -405,6 +574,23 @@ html, body {
 
 <div id="canvas-wrap"></div>
 <div id="hud"></div>
+
+<aside id="coachPanel">
+    <div class="panel-head"><span class="eyebrow">Coach console</span><span class="live-dot">● LIVE</span></div>
+    <div class="signal"><strong id="coachSignal">Reading the phase...</strong><span id="coachDetail">Playback-linked team intelligence</span></div>
+    <div class="metric"><div class="metric-line"><span>Goal threat</span><b id="threatLabel">--</b></div><div class="bar"><i id="orangeThreat" class="orange"></i><i id="blueThreat" class="blue"></i></div></div>
+    <div class="metric"><div class="metric-line"><span>Momentum</span><b id="momentumLabel">--</b></div><div class="bar"><i id="orangeMomentum" class="orange"></i><i id="blueMomentum" class="blue"></i></div></div>
+    <div class="metric"><div class="metric-line"><span>Ball control</span><b id="controlLabel">--</b></div><div class="bar"><i id="orangeControl" class="orange"></i><i id="blueControl" class="blue"></i></div></div>
+    <div class="section-title">Trend history</div>
+    <canvas id="trendChart" width="274" height="72"></canvas>
+    <div class="section-title">Player report</div>
+    <select id="playerSelect"></select>
+    <div id="playerReport"></div>
+    <div class="section-title">Automated review</div>
+    <div id="recommendations"></div>
+</aside>
+
+<section id="eventRail"><div class="rail-title">Replay events · click to jump</div><div id="eventList"></div></section>
 
 <div id="hint">
     Drag to orbit &middot; scroll to zoom &middot; right-drag to pan
@@ -687,6 +873,135 @@ hud.innerHTML = entities
         </span>
     </div>`)
     .join("");
+
+const COACH = DATA.analytics || { series: {}, players: {}, events: [], recommendations: [] };
+const SERIES = COACH.series || {};
+const coachSignal = document.getElementById("coachSignal");
+const coachDetail = document.getElementById("coachDetail");
+const threatLabel = document.getElementById("threatLabel");
+const momentumLabel = document.getElementById("momentumLabel");
+const controlLabel = document.getElementById("controlLabel");
+const playerSelect = document.getElementById("playerSelect");
+const playerReport = document.getElementById("playerReport");
+const trendChart = document.getElementById("trendChart");
+const trendContext = trendChart.getContext("2d");
+
+function seriesValue(name, index, fallback = 0) {
+    const values = SERIES[name] || [];
+    return values[Math.max(0, Math.min(values.length - 1, index))] ?? fallback;
+}
+
+function setTeamBar(name, value) {
+    document.getElementById(name).style.width = `${Math.max(0, Math.min(100, value))}%`;
+}
+
+function renderTrend(index) {
+    const width = trendChart.width;
+    const height = trendChart.height;
+    trendContext.clearRect(0, 0, width, height);
+    trendContext.strokeStyle = "rgba(150, 177, 192, .16)";
+    trendContext.lineWidth = 1;
+    [18, 36, 54].forEach(y => { trendContext.beginPath(); trendContext.moveTo(0, y); trendContext.lineTo(width, y); trendContext.stroke(); });
+    const draw = (name, color) => {
+        const values = SERIES[name] || [];
+        if (!values.length) return;
+        trendContext.strokeStyle = color;
+        trendContext.lineWidth = 2;
+        trendContext.beginPath();
+        values.forEach((value, i) => {
+            const x = i / Math.max(1, values.length - 1) * width;
+            const y = height - (Math.max(0, Math.min(100, value)) / 100 * (height - 4)) - 2;
+            if (i === 0) trendContext.moveTo(x, y); else trendContext.lineTo(x, y);
+        });
+        trendContext.stroke();
+    };
+    draw("orangeMomentum", "#ff7a00");
+    draw("blueMomentum", "#4ca6d5");
+    const cursorX = Math.max(0, Math.min(width, index / Math.max(1, M.frames - 1) * width));
+    trendContext.strokeStyle = "#fff";
+    trendContext.globalAlpha = .65;
+    trendContext.beginPath();
+    trendContext.moveTo(cursorX, 0);
+    trendContext.lineTo(cursorX, height);
+    trendContext.stroke();
+    trendContext.globalAlpha = 1;
+}
+
+function renderPlayerReport(name) {
+    const report = COACH.players?.[name];
+    if (!report) {
+        playerReport.innerHTML = "<div><span>Report</span><b>Not available</b></div>";
+        return;
+    }
+    playerReport.innerHTML = [
+        ["Impact peak", `${report.impactPeak}`],
+        ["Avg boost", `${report.boostAverage}%`],
+        ["Low boost", `${report.lowBoostPct}%`],
+        ["Ball proximity", `${report.ballProximityPct}%`],
+        ["Avg speed", `${(report.speedAverage / 100).toFixed(0)} km/h*`],
+        ["Attack bias", `${report.attackBias > 0 ? "+" : ""}${report.attackBias}`],
+    ].map(([label, value]) => `<div><span>${label}</span><b>${value}</b></div>`).join("");
+}
+
+function renderRecommendations() {
+    const target = document.getElementById("recommendations");
+    const recommendations = COACH.recommendations || [];
+    target.innerHTML = recommendations.slice(0, 4).map(rec => `<div class="rec"><span class="priority">${rec.priority} · ${rec.player}</span><br><b>${rec.title}</b><br>${rec.detail}</div>`).join("") || "No automated review available.";
+}
+
+function renderEventRail() {
+    const list = document.getElementById("eventList");
+    list.innerHTML = "";
+    (COACH.events || []).slice(0, 14).forEach(event => {
+        const button = document.createElement("button");
+        const time = document.createElement("time");
+        const text = document.createElement("span");
+        time.textContent = `${Number(event.time).toFixed(1)}s`;
+        text.innerHTML = `<b>${event.title}</b><small>${event.detail}</small>`;
+        button.append(time, text);
+        button.onclick = () => {
+            simTime = Math.max(0, Math.min(M.duration, event.frame * M.dt));
+            scrub.value = Math.round(simTime / Math.max(0.001, M.duration) * 1000);
+            playing = false;
+            playBtn.textContent = "Play";
+        };
+        list.appendChild(button);
+    });
+}
+
+function updateCoach(index) {
+    const orangeThreat = seriesValue("orangeThreat", index);
+    const blueThreat = seriesValue("blueThreat", index);
+    const orangeMomentum = seriesValue("orangeMomentum", index, 50);
+    const blueMomentum = seriesValue("blueMomentum", index, 50);
+    const orangeControl = seriesValue("orangeControl", index, 50);
+    const blueControl = seriesValue("blueControl", index, 50);
+    setTeamBar("orangeThreat", orangeThreat);
+    setTeamBar("blueThreat", blueThreat);
+    setTeamBar("orangeMomentum", orangeMomentum);
+    setTeamBar("blueMomentum", blueMomentum);
+    setTeamBar("orangeControl", orangeControl);
+    setTeamBar("blueControl", blueControl);
+    threatLabel.textContent = `${orangeThreat >= blueThreat ? "ORANGE" : "BLUE"} ${Math.max(orangeThreat, blueThreat).toFixed(0)}%`;
+    momentumLabel.textContent = `${orangeMomentum >= blueMomentum ? "ORANGE" : "BLUE"} ${Math.max(orangeMomentum, blueMomentum).toFixed(0)}%`;
+    controlLabel.textContent = `O ${orangeControl.toFixed(0)} / B ${blueControl.toFixed(0)}`;
+    const leader = orangeMomentum >= blueMomentum ? "ORANGE" : "BLUE";
+    const gap = Math.abs(orangeMomentum - blueMomentum);
+    coachSignal.textContent = gap > 28 ? `${leader} is driving the phase` : "Contested midfield phase";
+    coachDetail.textContent = gap > 28 ? "Look for the first rotation or boost decision that changes control." : "Small margins make the next touch and recovery important.";
+    renderTrend(index);
+    renderPlayerReport(playerSelect.value);
+}
+
+entities.filter(en => en.def.type !== "ball").forEach(en => {
+    const option = document.createElement("option");
+    option.value = en.def.name;
+    option.textContent = en.def.name;
+    playerSelect.appendChild(option);
+});
+playerSelect.onchange = () => renderPlayerReport(playerSelect.value);
+renderRecommendations();
+renderEventRail();
 
 function sampleAt(entity, tSec) {
     const frame = tSec / M.dt;
@@ -1174,6 +1489,7 @@ function animate() {
     updateCoverage(coverage.blue);
     updateCentroids(ballPos);
     updatePressureField();
+    updateCoach(Math.floor(simTime / M.dt));
 
     if (following && ballEntity) {
         const bs = sampleAt(ballEntity, simTime);
@@ -1259,7 +1575,9 @@ def main():
     df = load_data(csv_path)
 
     print("Building payload...")
-    payload = build_payload(df, args.fps)
+    with open(json_path, "r", encoding="utf-8") as metadata_file:
+        metadata = json.load(metadata_file)
+    payload = build_payload(df, args.fps, metadata)
 
     print("Fetching Three.js libraries...")
     three_js = fetch_js(THREE_CDN)

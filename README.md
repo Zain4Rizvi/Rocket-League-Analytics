@@ -2,6 +2,8 @@
 
 A local Rocket League replay analyzer. Upload a `.replay` file, process its player and ball telemetry, and view the match as an interactive 3D simulation in your browser.
 
+Generated replays include a coaching console with playback-synchronized goal-threat, momentum, and ball-control trends; clickable goal and transition events; player impact reports; boost-economy indicators; and explainable automated review recommendations. These are derived from the replay telemetry and are intended as coaching signals, not official RLCS statistics.
+
 **Live Demo:** [Rocket League Analytics](https://rocket-league-analytics.onrender.com/)
 
 ## Setup
