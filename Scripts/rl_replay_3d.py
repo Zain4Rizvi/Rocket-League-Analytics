@@ -194,6 +194,34 @@ def moving_average(values, window):
     return pd.Series(values).rolling(window, min_periods=1, center=True).mean().to_numpy()
 
 
+def goal_times_from_crossings(ball_y, grid, goals):
+    """True goal times, measured from the ball crossing the goal line.
+
+    The replay header records a frame index per goal, but replay frames are not
+    uniformly spaced - dead time between goals stretches them - so converting
+    with `frame / 30` drifts by tens of seconds over a match. Detecting the
+    crossing directly avoids that, and the sign of the crossing confirms who
+    scored (BLUE attacks +y).
+
+    Returns None if the crossings do not line up with the recorded goals, in
+    which case the caller should fall back to the frame estimate.
+    """
+    if not goals:
+        return None
+
+    inside = np.abs(ball_y) > FIELD_LENGTH / 2.0
+    entries = np.where(inside & ~np.r_[False, inside[:-1]])[0]
+    if len(entries) != len(goals):
+        return None
+
+    for index, goal in zip(entries, goals):
+        scored_by = "BLUE" if ball_y[index] > 0 else "ORANGE"
+        if scored_by != goal.get("team"):
+            return None
+
+    return [float(grid[index] - grid[0]) for index in entries]
+
+
 def build_coaching_analytics(entities, grid, fps, metadata=None):
     ball = next((entry for entry in entities if entry["type"] == "ball"), None)
     players = [entry for entry in entities if entry["type"] == "car"]
@@ -272,8 +300,13 @@ def build_coaching_analytics(entities, grid, fps, metadata=None):
             events.append({"frame": frame, "time": round(float(grid[frame] - grid[0]), 1), "kind": "TRANSITION", "team": "NEUTRAL", "title": "Fast transition", "detail": f"Ball speed peaked at {ball_speed[frame] / 100:.0f} km/h proxy."})
 
     if metadata:
-        for goal in metadata.get("goals", []):
-            goal_time = float(goal.get("frame") or 0) / 30.0 - float(grid[0])
+        recorded_goals = metadata.get("goals", [])
+        measured_times = goal_times_from_crossings(ball_y, grid, recorded_goals)
+        for index, goal in enumerate(recorded_goals):
+            if measured_times is not None:
+                goal_time = measured_times[index]
+            else:
+                goal_time = float(goal.get("frame") or 0) / 30.0 - float(grid[0])
             goal_frame = min(frame_count - 1, max(0, int(np.searchsorted(grid - grid[0], goal_time))))
             events.append({"frame": goal_frame, "time": round(float(grid[goal_frame] - grid[0]), 1), "kind": "GOAL", "team": goal.get("team", "NEUTRAL"), "title": f"{goal.get('team', 'TEAM')} goal", "detail": f"Scored by {goal.get('player_name', 'unknown player')}."})
     events = sorted(events, key=lambda event: event["frame"])
@@ -960,12 +993,7 @@ function renderEventRail() {
         time.textContent = `${Number(event.time).toFixed(1)}s`;
         text.innerHTML = `<b>${event.title}</b><small>${event.detail}</small>`;
         button.append(time, text);
-        button.onclick = () => {
-            simTime = Math.max(0, Math.min(M.duration, event.frame * M.dt));
-            scrub.value = Math.round(simTime / Math.max(0.001, M.duration) * 1000);
-            playing = false;
-            playBtn.textContent = "Play";
-        };
+        button.onclick = () => seekTo(event.frame * M.dt);
         list.appendChild(button);
     });
 }
@@ -1499,6 +1527,27 @@ function animate() {
 
     controls.update();
     renderer.render(scene, camera);
+}
+
+// Jump playback to a point in time. Used by the event rail and by the host
+// page, which posts {type:"seek", time} when a user clicks an AI evidence chip.
+function seekTo(seconds) {
+    simTime = Math.max(0, Math.min(M.duration, Number(seconds) || 0));
+    scrub.value = Math.round(simTime / Math.max(0.001, M.duration) * 1000);
+    playing = false;
+    playBtn.textContent = "Play";
+}
+
+window.addEventListener("message", (e) => {
+    if (e.source !== window.parent) return;
+    if (!e.data || e.data.type !== "seek") return;
+    seekTo(e.data.time);
+});
+
+// Tell the host page the listener above exists, so it never posts into a
+// viewer that has not finished loading.
+if (window.parent !== window) {
+    window.parent.postMessage({ type: "viewerReady" }, "*");
 }
 
 animate();

@@ -30,8 +30,8 @@
     header { height: 68px; flex: 0 0 68px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--line); }
     .wordmark { color: #fff; font-size: 16px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; }
     .tagline { color: var(--muted); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; }
-    .intro { display: flex; align-items: baseline; justify-content: space-between; gap: 24px; padding: 24px 0 18px; }
-    h1 { margin: 0; color: #fff; font-size: clamp(24px, 3vw, 38px); line-height: 1; font-weight: 600; letter-spacing: -0.03em; }
+    .intro { display: flex; align-items: baseline; justify-content: space-between; gap: 24px; padding: 18px 0 14px; }
+    h1 { margin: 0; color: #fff; font-size: clamp(22px, 2.4vw, 30px); line-height: 1; font-weight: 600; letter-spacing: -0.03em; }
     .intro p { max-width: 520px; margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; text-align: right; }
     .workspace { min-height: 0; flex: 1; display: flex; flex-direction: column; gap: 12px; }
     .upload-panel { flex: 0 0 auto; display: flex; align-items: center; gap: 16px; padding: 10px 14px; background: rgba(16, 24, 32, .92); border: 1px solid var(--line); }
@@ -45,15 +45,63 @@
     .status { min-height: 18px; margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
     .status.error { color: #a32620; }
     .status.success { color: #70c995; }
+
+    .stage { min-height: 0; flex: 1; display: flex; gap: 12px; }
     .viewer { min-height: 0; flex: 1; background: #05090d; border: 1px solid var(--line); position: relative; overflow: hidden; box-shadow: 0 12px 40px rgba(0, 0, 0, .28); }
     .viewer.empty { display: grid; place-items: center; padding: 40px; color: #71818c; text-align: center; font-size: 14px; }
     iframe { width: 100%; height: 100%; display: block; border: 0; }
     .loading { color: var(--accent); }
+
+    /* Coach panel */
+    .coach { flex: 0 0 380px; min-height: 0; display: flex; flex-direction: column; background: rgba(16, 24, 32, .92); border: 1px solid var(--line); }
+    .coach-head { flex: 0 0 auto; padding: 12px 14px 10px; border-bottom: 1px solid var(--line); }
+    .coach-head .eyebrow { color: var(--muted); font-size: 9px; letter-spacing: .16em; text-transform: uppercase; }
+    .ask-row { display: flex; gap: 8px; margin-top: 8px; }
+    #question { flex: 1; min-width: 0; padding: 9px 10px; color: var(--ink); background: #15212b; border: 1px solid #486071; font: inherit; font-size: 13px; resize: none; height: 62px; line-height: 1.4; }
+    #question:focus { outline: none; border-color: var(--accent); }
+    #question:disabled { opacity: .45; cursor: not-allowed; }
+    #askButton { flex: 0 0 auto; align-self: stretch; padding: 0 16px; color: #0d1319; background: var(--accent); border: 0; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+    #askButton:hover:not(:disabled) { background: #ff8a5c; }
+    #askButton:disabled { background: #3a4a56; color: #8c9aa5; cursor: not-allowed; }
+    .suggestions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .suggestion { padding: 4px 9px; color: var(--muted); background: transparent; border: 1px solid var(--line); font: inherit; font-size: 11px; cursor: pointer; }
+    .suggestion:hover { color: var(--ink); border-color: #486071; }
+    .suggestion:disabled { opacity: .4; cursor: not-allowed; }
+
+    .coach-body { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 14px 16px; }
+    .coach-body::-webkit-scrollbar { width: 8px; }
+    .coach-body::-webkit-scrollbar-thumb { background: #2c3c48; }
+    .placeholder { color: #71818c; font-size: 12px; line-height: 1.6; }
+    .progress { display: flex; align-items: center; gap: 8px; margin: 3px 0; color: var(--muted); font-size: 11px; }
+    .progress .tick { color: #70c995; }
+    .progress.busy { color: var(--accent); }
+    .answer { margin: 12px 0 4px; color: var(--ink); font-size: 13px; line-height: 1.6; }
+    .answer p { margin: 0 0 9px; }
+    .answer ul { margin: 0 0 9px; padding-left: 18px; }
+    .answer li { margin-bottom: 4px; }
+    .answer strong { color: #fff; }
+    .section-title { margin: 14px 0 7px; color: var(--muted); font-size: 9px; letter-spacing: .14em; text-transform: uppercase; }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .chip { display: inline-flex; align-items: baseline; gap: 6px; padding: 5px 9px; color: var(--ink); background: rgba(255, 113, 56, .1); border: 1px solid rgba(255, 113, 56, .38); font: inherit; font-size: 11px; text-align: left; cursor: pointer; }
+    .chip:hover { background: rgba(255, 113, 56, .22); }
+    .chip time { color: var(--accent); font-variant-numeric: tabular-nums; font-weight: 600; }
+    .chart { margin-top: 10px; }
+    .chart h4 { margin: 0 0 6px; color: var(--ink); font-size: 12px; font-weight: 600; }
+    .chart canvas { width: 100%; display: block; }
+    .legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 5px; color: var(--muted); font-size: 10px; }
+    .legend span { display: inline-flex; align-items: center; gap: 4px; }
+    .legend i { width: 8px; height: 8px; display: inline-block; }
+    .error-text { margin-top: 10px; color: #d9604f; font-size: 12px; line-height: 1.5; }
+
+    @media (max-width: 1100px) {
+      .stage { flex-direction: column; }
+      .coach { flex: 0 0 300px; }
+    }
     @media (max-width: 760px) {
       .shell { padding: 0 12px 12px; }
       header { height: 56px; flex-basis: 56px; }
       .tagline { display: none; }
-      .intro { display: block; padding: 18px 0 14px; }
+      .intro { display: block; padding: 14px 0 12px; }
       .intro p { margin-top: 8px; text-align: left; }
       .upload-panel { align-items: stretch; flex-direction: column; gap: 8px; padding: 10px; }
       .drop-zone { justify-content: center; min-height: 38px; }
@@ -69,7 +117,7 @@
     </header>
     <section class="intro">
       <h1>Turn a replay into a match you can inspect.</h1>
-      <p>Drop a replay below to prepare its telemetry and open the interactive 3D simulation.</p>
+      <p>Drop a replay to prepare its telemetry, open the interactive 3D simulation, then ask the coach what happened.</p>
     </section>
     <section class="workspace">
       <div class="upload-panel">
@@ -81,7 +129,22 @@
         <button class="example-button" id="exampleButton" type="button">View example</button>
         <p class="status" id="status">Ready for a replay.</p>
       </div>
-      <div class="viewer empty" id="viewer">Your simulation will appear here after processing.</div>
+      <div class="stage">
+        <div class="viewer empty" id="viewer">Your simulation will appear here after processing.</div>
+        <aside class="coach">
+          <div class="coach-head">
+            <div class="eyebrow">Ask the coach</div>
+            <div class="ask-row">
+              <textarea id="question" placeholder="Why did we concede the third goal?" disabled></textarea>
+              <button id="askButton" type="button" disabled>Ask</button>
+            </div>
+            <div class="suggestions" id="suggestions"></div>
+          </div>
+          <div class="coach-body" id="coachBody">
+            <p class="placeholder">Load a replay, then ask about boost, positioning, goals or any moment in the match. Answers cite moments you can click to jump the 3D view.</p>
+          </div>
+        </aside>
+      </div>
     </section>
   </main>
   <script>
@@ -90,16 +153,84 @@
     const exampleButton = document.getElementById("exampleButton");
     const status = document.getElementById("status");
     const viewer = document.getElementById("viewer");
+    const question = document.getElementById("question");
+    const askButton = document.getElementById("askButton");
+    const suggestions = document.getElementById("suggestions");
+    const coachBody = document.getElementById("coachBody");
+
+    const TEAM_COLORS = { BLUE: "#4ca6d5", ORANGE: "#ff7138" };
+    const PALETTE = ["#ff7138", "#4ca6d5", "#70c995", "#e0c15c", "#b07fd0", "#e08a8a"];
+    const SUGGESTED = [
+      "How did this match go?",
+      "Who managed their boost worst?",
+      "Was our positioning the problem?",
+      "Talk me through the goals."
+    ];
+
+    let currentStem = null;
+    let viewerReady = false;
+    let pendingSeek = null;
+    let asking = false;
+
+    // The viewer announces itself once its seek listener is installed, so we
+    // never post into a frame that has not finished loading.
+    window.addEventListener("message", (event) => {
+      if (event.data && event.data.type === "viewerReady") {
+        viewerReady = true;
+        if (pendingSeek !== null) {
+          seek(pendingSeek);
+          pendingSeek = null;
+        }
+      }
+    });
+
+    function seek(seconds) {
+      const frame = viewer.querySelector("iframe");
+      if (!frame || !viewerReady) {
+        pendingSeek = seconds;
+        return;
+      }
+      frame.contentWindow.postMessage({ type: "seek", time: seconds }, "*");
+    }
 
     function showSimulation(url) {
+      viewerReady = false;
+      pendingSeek = null;
       viewer.className = "viewer";
-      viewer.innerHTML = `<iframe title="Rocket League replay simulation" src="${url}"></iframe>`;
+      viewer.innerHTML = "";
+      const frame = document.createElement("iframe");
+      frame.title = "Rocket League replay simulation";
+      frame.src = url;
+      viewer.appendChild(frame);
     }
 
     function setStatus(message, type = "") {
       status.textContent = message;
       status.className = `status ${type}`;
     }
+
+    function setAskEnabled(enabled) {
+      question.disabled = !enabled;
+      askButton.disabled = !enabled || asking;
+      suggestions.querySelectorAll("button").forEach(button => {
+        button.disabled = !enabled || asking;
+      });
+    }
+
+    SUGGESTED.forEach(text => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "suggestion";
+      button.textContent = text;
+      button.disabled = true;
+      button.addEventListener("click", () => {
+        question.value = text;
+        ask();
+      });
+      suggestions.appendChild(button);
+    });
+
+    // ---- upload ------------------------------------------------------------
 
     async function upload(file) {
       if (!file || !file.name.toLowerCase().endsWith(".replay")) {
@@ -112,12 +243,17 @@
       setStatus("Processing replay... this can take a moment.", "loading");
       viewer.className = "viewer empty";
       viewer.textContent = "Building the interactive simulation...";
+      currentStem = null;
+      setAskEnabled(false);
       try {
         const response = await fetch("/api/upload", { method: "POST", body: form });
         const result = await response.json();
         if (!response.ok) throw new Error(result.details || result.error || "Upload failed.");
         setStatus(`${file.name} is ready.`, "success");
         showSimulation(result.simulationUrl);
+        currentStem = result.stem;
+        resetCoach();
+        setAskEnabled(true);
       } catch (error) {
         setStatus(error.message, "error");
         viewer.className = "viewer empty";
@@ -125,9 +261,24 @@
       }
     }
 
-    exampleButton.addEventListener("click", () => {
+    exampleButton.addEventListener("click", async () => {
       setStatus("Showing example replay.", "success");
       showSimulation("/example");
+      currentStem = null;
+      setAskEnabled(false);
+      resetCoach();
+      try {
+        const response = await fetch("/api/example");
+        const result = await response.json();
+        if (result.askable) {
+          currentStem = result.stem;
+          setAskEnabled(true);
+        } else {
+          coachBody.innerHTML = '<p class="placeholder">The example viewer is available, but its telemetry is not on this server, so it cannot be questioned. Upload a replay to ask the coach.</p>';
+        }
+      } catch (error) {
+        setAskEnabled(false);
+      }
     });
 
     input.addEventListener("change", () => upload(input.files[0]));
@@ -140,6 +291,260 @@
       dropZone.classList.remove("is-over");
     }));
     dropZone.addEventListener("drop", event => upload(event.dataTransfer.files[0]));
+
+    // ---- asking ------------------------------------------------------------
+
+    function resetCoach() {
+      coachBody.innerHTML = '<p class="placeholder">Ask about boost, positioning, goals or any moment in the match.</p>';
+    }
+
+    function escapeHtml(text) {
+      return text.replace(/[&<>"']/g, character => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+      }[character]));
+    }
+
+    // The coach writes short paragraphs and dash bullets; render just those.
+    function renderAnswer(text) {
+      const blocks = [];
+      let list = null;
+      for (const rawLine of escapeHtml(text).split("\n")) {
+        const line = rawLine.trim();
+        if (!line) { continue; }
+        const bullet = line.match(/^[-*]\s+(.*)$/);
+        if (bullet) {
+          list = list || [];
+          list.push(`<li>${bullet[1]}</li>`);
+        } else {
+          if (list) { blocks.push(`<ul>${list.join("")}</ul>`); list = null; }
+          blocks.push(`<p>${line}</p>`);
+        }
+      }
+      if (list) blocks.push(`<ul>${list.join("")}</ul>`);
+      return blocks.join("").replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+    }
+
+    function addProgress(name, args) {
+      const detail = Object.entries(args || {})
+        .map(([key, value]) => `${key}: ${value}`)
+        .join(", ");
+      const label = name.replace(/_/g, " ");
+      const row = document.createElement("div");
+      row.className = "progress busy";
+      row.innerHTML = `<span class="tick">&#9679;</span><span>${escapeHtml(label)}${detail ? ` &middot; ${escapeHtml(detail)}` : ""}</span>`;
+      coachBody.appendChild(row);
+      coachBody.scrollTop = coachBody.scrollHeight;
+      return row;
+    }
+
+    function addEvidence(items) {
+      if (!items || !items.length) return;
+      const title = document.createElement("div");
+      title.className = "section-title";
+      title.textContent = "Jump to the moment";
+      coachBody.appendChild(title);
+
+      const wrap = document.createElement("div");
+      wrap.className = "chips";
+      items.forEach(item => {
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "chip";
+        const minutes = Math.floor(item.time / 60);
+        const seconds = Math.floor(item.time % 60).toString().padStart(2, "0");
+        chip.innerHTML = `<time>${minutes}:${seconds}</time><span>${escapeHtml(item.label)}</span>`;
+        chip.addEventListener("click", () => seek(item.time));
+        wrap.appendChild(chip);
+      });
+      coachBody.appendChild(wrap);
+    }
+
+    function seriesColor(entry, index) {
+      return TEAM_COLORS[entry.team] || PALETTE[index % PALETTE.length];
+    }
+
+    function chartFrame(title) {
+      const box = document.createElement("div");
+      box.className = "chart";
+      const heading = document.createElement("h4");
+      heading.textContent = title;
+      box.appendChild(heading);
+      return box;
+    }
+
+    function addLegend(box, entries) {
+      const legend = document.createElement("div");
+      legend.className = "legend";
+      entries.forEach(([label, color]) => {
+        const item = document.createElement("span");
+        item.innerHTML = `<i style="background:${color}"></i>${escapeHtml(label)}`;
+        legend.appendChild(item);
+      });
+      box.appendChild(legend);
+    }
+
+    function drawLineChart(chart) {
+      const box = chartFrame(chart.title);
+      const canvas = document.createElement("canvas");
+      const width = 348, height = 110;
+      canvas.width = width * 2;
+      canvas.height = height * 2;
+      canvas.style.height = `${height}px`;
+      box.appendChild(canvas);
+
+      const context = canvas.getContext("2d");
+      context.scale(2, 2);
+      const yMax = chart.y_max || Math.max(1, ...chart.series.flatMap(s => s.points.map(p => p[1])));
+      const allTimes = chart.series.flatMap(s => s.points.map(p => p[0]));
+      const tMax = Math.max(1, ...allTimes);
+
+      context.strokeStyle = "rgba(150, 177, 192, .16)";
+      context.lineWidth = 1;
+      [0.25, 0.5, 0.75].forEach(fraction => {
+        const y = height * fraction;
+        context.beginPath();
+        context.moveTo(0, y);
+        context.lineTo(width, y);
+        context.stroke();
+      });
+
+      chart.series.forEach((entry, index) => {
+        context.strokeStyle = seriesColor(entry, index);
+        context.lineWidth = 1.5;
+        context.beginPath();
+        entry.points.forEach((point, pointIndex) => {
+          const x = point[0] / tMax * width;
+          const y = height - (Math.max(0, Math.min(yMax, point[1])) / yMax) * (height - 4) - 2;
+          if (pointIndex === 0) context.moveTo(x, y); else context.lineTo(x, y);
+        });
+        context.stroke();
+      });
+
+      coachBody.appendChild(box);
+      addLegend(box, chart.series.map((entry, index) => [entry.label, seriesColor(entry, index)]));
+    }
+
+    function drawBarChart(chart) {
+      const box = chartFrame(chart.title);
+      const colors = ["#3f6d86", "#6f7f8b", "#ff7138"];
+      chart.series.forEach(entry => {
+        const row = document.createElement("div");
+        row.style.margin = "6px 0";
+        const total = entry.values.reduce((sum, value) => sum + value, 0) || 1;
+        const segments = entry.values.map((value, index) =>
+          `<i style="display:block;height:100%;width:${value / total * 100}%;background:${colors[index]}"></i>`
+        ).join("");
+        row.innerHTML =
+          `<div style="display:flex;justify-content:space-between;color:#8c9aa5;font-size:10px;margin-bottom:3px">` +
+          `<span>${escapeHtml(entry.label)}</span>` +
+          `<span>${entry.values.map(value => `${Math.round(value)}%`).join(" / ")}</span></div>` +
+          `<div style="display:flex;height:6px;background:#1b2730">${segments}</div>`;
+        box.appendChild(row);
+      });
+      coachBody.appendChild(box);
+      addLegend(box, chart.categories.map((category, index) => [category, colors[index]]));
+    }
+
+    function addChart(chart) {
+      if (!chart) return;
+      if (chart.kind === "line" && chart.series && chart.series.length) drawLineChart(chart);
+      else if (chart.kind === "bars" && chart.series && chart.series.length) drawBarChart(chart);
+      // "moments" charts are covered by the evidence chips.
+    }
+
+    async function ask() {
+      const text = question.value.trim();
+      if (!text || !currentStem || asking) return;
+
+      asking = true;
+      setAskEnabled(true);
+      askButton.disabled = true;
+      askButton.textContent = "...";
+      coachBody.innerHTML = "";
+
+      const heading = document.createElement("div");
+      heading.className = "section-title";
+      heading.textContent = "Running analyses";
+      coachBody.appendChild(heading);
+
+      const charts = [];
+      let answered = false;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 180000);
+
+      try {
+        const response = await fetch("/api/ask", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ stem: currentStem, question: text }),
+          signal: controller.signal
+        });
+
+        if (!response.ok) {
+          const failure = await response.json().catch(() => ({}));
+          throw new Error(failure.details || failure.error || `Request failed (${response.status}).`);
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          let newline;
+          while ((newline = buffer.indexOf("\n")) >= 0) {
+            const line = buffer.slice(0, newline).trim();
+            buffer = buffer.slice(newline + 1);
+            if (!line) continue;
+            const event = JSON.parse(line);
+
+            if (event.type === "tool") {
+              addProgress(event.name, event.args);
+            } else if (event.type === "chart") {
+              charts.push(event.chart);
+            } else if (event.type === "answer") {
+              answered = true;
+              coachBody.querySelectorAll(".progress").forEach(row => row.classList.remove("busy"));
+              const answer = document.createElement("div");
+              answer.className = "answer";
+              answer.innerHTML = renderAnswer(event.text);
+              coachBody.appendChild(answer);
+            } else if (event.type === "evidence") {
+              addEvidence(event.items);
+              charts.forEach(addChart);
+            } else if (event.type === "error") {
+              throw new Error(event.error);
+            }
+          }
+        }
+
+        if (!answered) throw new Error("The coach did not return an answer.");
+      } catch (error) {
+        const message = error.name === "AbortError"
+          ? "The coach took too long and the request was cancelled."
+          : error.message;
+        const failure = document.createElement("p");
+        failure.className = "error-text";
+        failure.textContent = message;
+        coachBody.appendChild(failure);
+      } finally {
+        clearTimeout(timeout);
+        asking = false;
+        askButton.textContent = "Ask";
+        setAskEnabled(Boolean(currentStem));
+        coachBody.scrollTop = coachBody.scrollHeight;
+      }
+    }
+
+    askButton.addEventListener("click", ask);
+    question.addEventListener("keydown", event => {
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        ask();
+      }
+    });
   </script>
 </body>
 </html>
