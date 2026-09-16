@@ -55,6 +55,7 @@ html, body {
 }
 
 #hud .boostfill {
+    display: block;
     height: 100%;
     background: linear-gradient(90deg, #6ee7ff, #38bdf8);
 }
@@ -1446,8 +1447,8 @@ goalFrame(-1, 0x66d9ff);
 goalFrame(1, 0xff9f45);
 
 function makeLabelSprite(name, color) {
-    const W = 180;
-    const H = 64;
+    const W = 240;
+    const H = 86;
     const canvas = document.createElement("canvas");
     canvas.width = W;
     canvas.height = H;
@@ -1456,29 +1457,29 @@ function makeLabelSprite(name, color) {
     const material = new THREE.SpriteMaterial({ map: texture, depthTest: false, transparent: true });
     const sprite = new THREE.Sprite(material);
 
-    sprite.scale.set(270, 96, 1);
+    sprite.scale.set(360, 129, 1);
     sprite.renderOrder = 999;
 
     function draw(pct) {
         ctx.clearRect(0, 0, W, H);
-        ctx.font = "bold 24px sans-serif";
+        ctx.font = "bold 34px sans-serif";
         ctx.textAlign = "center";
 
         ctx.fillStyle = "#000000";
         ctx.globalAlpha = 0.7;
-        for (const [dx, dy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
-            ctx.fillText(name, W / 2 + dx, 27 + dy);
+        for (const [dx, dy] of [[-2, -2], [2, -2], [-2, 2], [2, 2]]) {
+            ctx.fillText(name, W / 2 + dx, 37 + dy);
         }
 
         ctx.globalAlpha = 1;
         ctx.fillStyle = "#ffffff";
-        ctx.fillText(name, W / 2, 27);
+        ctx.fillText(name, W / 2, 37);
 
         if (pct !== null && pct !== undefined) {
-            const barW = 120;
-            const barH = 8;
+            const barW = 160;
+            const barH = 11;
             const barX = (W - barW) / 2;
-            const barY = 39;
+            const barY = 53;
 
             ctx.fillStyle = "#222833";
             ctx.fillRect(barX, barY, barW, barH);
