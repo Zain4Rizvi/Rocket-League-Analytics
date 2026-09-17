@@ -1,0 +1,20 @@
+[project]
+name = "rocket-league-analytics"
+version = "0.1.0"
+description = "Rocket League replay analysis and viewer"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "numpy==2.3.5",
+  "pandas==2.3.3",
+  "pydantic>=2.11.7,<3",
+  "langchain-core>=1.6.1",
+  "langchain-anthropic>=0.3.0",
+  "langgraph>=0.2.0",
+  "langchain-google-genai>=4.4.0",
+  "python-dotenv>=1.2.3",
+  "google-genai>=2.24.0",
+]
+
+[tool.uv]
+package = false
