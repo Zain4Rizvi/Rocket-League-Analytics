@@ -6,11 +6,11 @@ AI coaching agent
 Wraps the deterministic analyses in `replay_analysis` as LangChain tools and
 orchestrates them with a small LangGraph workflow.
 
-Division of labour, per CLAUDE.md:
+Division of labour:
 
 - Python computes every number. The model never calculates statistics.
-- `claude-opus-5` decides which analyses to run and writes the coaching answer.
-- `claude-sonnet-5` does one structuring pass, selecting which already-computed
+- `gemini-2.0-flash-exp` decides which analyses to run and writes the coaching answer.
+- `gemini-1.5-flash` does one structuring pass, selecting which already-computed
   moments back up the answer.
 
 Only the compact `llm_payload` of each analysis enters the model's context.
@@ -23,7 +23,7 @@ from typing import Annotated, Any, Optional, TypedDict
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.tools import StructuredTool
-from langchain_anthropic import ChatAnthropic
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
@@ -31,8 +31,8 @@ from pydantic import BaseModel, Field
 
 import replay_analysis
 
-PLANNER_MODEL = "claude-opus-5"
-STRUCTURING_MODEL = "claude-sonnet-5"
+PLANNER_MODEL = "gemini-3.6-flash"
+STRUCTURING_MODEL = "gemini-3.6-flash"
 
 # Two nodes per tool round, so this allows roughly six rounds before stopping.
 RECURSION_LIMIT = 14
@@ -187,10 +187,10 @@ def _select_evidence(context, answer):
     if not candidates:
         return []
     try:
-        structurer = ChatAnthropic(
+        structurer = ChatGoogleGenerativeAI(
             model=STRUCTURING_MODEL,
-            max_tokens=1500,
-            timeout=REQUEST_TIMEOUT,
+            temperature=0,
+            google_api_key=os.environ.get("GEMINI_API_KEY"),
         ).with_structured_output(Evidence)
         selection = structurer.invoke([
             HumanMessage(STRUCTURING_PROMPT.format(
@@ -225,10 +225,10 @@ def answer_question(stem, question, player=None):
     charts: list[Any] = []
     tools = _build_tools(stem, charts)
 
-    planner = ChatAnthropic(
+    planner = ChatGoogleGenerativeAI(
         model=PLANNER_MODEL,
-        max_tokens=8000,
-        timeout=REQUEST_TIMEOUT,
+        temperature=0,
+        google_api_key=os.environ.get("GEMINI_API_KEY"),
     ).bind_tools(tools)
 
     def plan(state: CoachState):
@@ -287,7 +287,7 @@ def answer_question(stem, question, player=None):
 
 def available():
     """Whether the agent can run - lets the server fail helpfully."""
-    return bool(os.environ.get("ANTHROPIC_API_KEY"))
+    return bool(os.environ.get("GEMINI_API_KEY"))
 
 
 if __name__ == "__main__":

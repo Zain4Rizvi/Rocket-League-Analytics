@@ -11,7 +11,7 @@ from uuid import uuid4
 import os
 
 try:
-    # Optional: load ANTHROPIC_API_KEY (and anything else) from a local .env
+    # Optional: load GEMINI_API_KEY (and anything else) from a local .env
     # file so it doesn't need to be exported into the shell environment.
     # python-dotenv is a small dependency used only for this; its absence
     # should never stop the replay pipeline from working.
@@ -207,9 +207,9 @@ class ReplayServer(BaseHTTPRequestHandler):
             })
             return
 
-        if not os.environ.get("ANTHROPIC_API_KEY"):
+        if not os.environ.get("GEMINI_API_KEY"):
             json_response(self, 503, {
-                "error": "AI coaching is off. Set ANTHROPIC_API_KEY and restart the server."
+                "error": "AI coaching is off. Set GEMINI_API_KEY and restart the server."
             })
             return
 
