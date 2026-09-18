@@ -28,6 +28,8 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
 from pydantic import BaseModel, Field
+from langchain_groq import ChatGroq
+
 
 import replay_analysis
 
@@ -187,10 +189,10 @@ def _select_evidence(context, answer):
     if not candidates:
         return []
     try:
-        structurer = ChatGoogleGenerativeAI(
-            model=STRUCTURING_MODEL,
+        structurer = ChatGroq(
+            model="openai/gpt-oss-120b",
             temperature=0,
-            google_api_key=os.environ.get("GEMINI_API_KEY"),
+            api_key=os.environ.get("GROQ_API_KEY"),
         ).with_structured_output(Evidence)
         selection = structurer.invoke([
             HumanMessage(STRUCTURING_PROMPT.format(
@@ -225,10 +227,10 @@ def answer_question(stem, question, player=None):
     charts: list[Any] = []
     tools = _build_tools(stem, charts)
 
-    planner = ChatGoogleGenerativeAI(
-        model=PLANNER_MODEL,
+    planner = ChatGroq(
+        model="openai/gpt-oss-120b",  # or "llama-3.1-70b-versatile"
         temperature=0,
-        google_api_key=os.environ.get("GEMINI_API_KEY"),
+        api_key=os.environ.get("GROQ_API_KEY"),
     ).bind_tools(tools)
 
     def plan(state: CoachState):
