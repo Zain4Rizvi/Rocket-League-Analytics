@@ -234,14 +234,12 @@ Any future AI feature should key off this stem — do not introduce a second ID 
   importing `rl_replay_3d` for reuse must call that first or teams will be `None`.
 - `fetch_js` hits two CDNs on every generation; offline runs fail the whole pipeline.
 - `requirements.txt` is UTF-16 encoded. Rewriting it carelessly may break `pip install`.
-- **`build_coaching_analytics` has an inverted attack direction.** Line ~220 sets
-  `attack_direction = 1.0 if team == "orange" else -1.0`, but goal-line crossings prove the
-  opposite: BLUE attacks +y and ORANGE attacks -y (verified — all four BLUE goals on the
-  sample cross +y). This flips the sign of `attackBias` and the team labels on the viewer's
-  threat series and THREAT events. It is **not fixed** — it is the coach console's whole
-  existing model and changing it is a separate decision. `replay_analysis.py` uses the
-  correct direction (`ATTACK_SIGN`) and re-derives THREAT team labels from ball position, so
-  AI answers are right even where the console's labels are not. Expect the two to disagree.
+- **`build_coaching_analytics`'s inverted attack direction was fixed.** `attack_direction`
+  now matches `replay_analysis.py`'s `ATTACK_SIGN` (BLUE attacks +y toward the orange goal,
+  ORANGE attacks -y toward the blue goal), and the orange/blue threat series (previously
+  built from the wrong side of the field) were swapped to match. `attackBias` and the
+  viewer's threat series / THREAT event team labels now agree with `replay_analysis.py`'s
+  AI-facing numbers instead of disagreeing with them.
 - Goal timing **was** wrong (`frame / 30` against non-uniform frames, drifting up to 39s) and
   is now fixed via `goal_times_from_crossings`, with a fallback to the old estimate when the
   crossings do not line up with the header.
