@@ -676,8 +676,8 @@ html, body {
         <option value="4">4x</option>
     </select>
     <button id="followBtn">Follow Ball: Off</button>
-    <button id="coverageBtn" class="active">Coverage: On</button>
-    <button id="centroidBtn" class="active">Centroid: On</button>
+    <button id="coverageBtn">Coverage: Off</button>
+    <button id="centroidBtn">Centroid: Off</button>
     <button id="pressureBtn" class="active">Pressure: On</button>
     <button id="fullscreenBtn">Fullscreen</button>
 </div>
@@ -1132,7 +1132,7 @@ const coverage = {
         group: new THREE.Group(),
         mesh: null,
         edges: null,
-        enabled: true
+        enabled: false
     },
     blue: {
         color: new THREE.Color(DATA.teams.blue.color),
@@ -1141,7 +1141,7 @@ const coverage = {
         group: new THREE.Group(),
         mesh: null,
         edges: null,
-        enabled: true
+        enabled: false
     }
 };
 
@@ -1262,7 +1262,7 @@ function createTeamCentroidObject(colorHex) {
     group.add(line);
 
     centroidGroup.add(group);
-    return { group, sphere, line, lineGeo, enabled: true };
+    return { group, sphere, line, lineGeo, enabled: false };
 }
 
 const centroids = {
