@@ -245,7 +245,9 @@ def build_coaching_analytics(entities, grid, fps, metadata=None):
         speed = np.hypot(np.gradient(x, 1.0 / fps), np.gradient(y, 1.0 / fps))
         boost = np.asarray(player.get("boost") or [50.0] * frame_count, dtype=float)
         team = player.get("team") or "orange"
-        attack_direction = 1.0 if team == "orange" else -1.0
+        # BLUE attacks +y (toward the orange goal at y=+5120), ORANGE attacks -y
+        # (toward the blue goal at y=-5120) - confirmed by goal-line crossings.
+        attack_direction = -1.0 if team == "orange" else 1.0
         distance_to_ball = np.hypot(x - ball_x, y - ball_y)
         proximity = np.exp(-distance_to_ball / 1800.0)
         progress = np.clip(attack_direction * y / half_length, -1.0, 1.0)
@@ -269,8 +271,10 @@ def build_coaching_analytics(entities, grid, fps, metadata=None):
     centrality = np.exp(-np.abs(ball_x) / 2200.0)
     approach = np.clip(ball_speed / 2300.0, 0, 1)
     threat = np.clip((1 - goal_distance / half_length) * 0.60 + centrality * 0.25 + approach * 0.15, 0, 1)
-    team_state["orange"]["threat"] = threat * np.clip(ball_y / 1200.0, 0, 1) * 100
-    team_state["blue"]["threat"] = threat * np.clip(-ball_y / 1200.0, 0, 1) * 100
+    # Orange threatens the blue goal (y=-5120), blue threatens the orange goal
+    # (y=+5120) - see the attack_direction note above.
+    team_state["orange"]["threat"] = threat * np.clip(-ball_y / 1200.0, 0, 1) * 100
+    team_state["blue"]["threat"] = threat * np.clip(ball_y / 1200.0, 0, 1) * 100
 
     orange_momentum = 50 + 50 * np.tanh(team_state["orange"]["momentum"] / max(1, len(ORANGE_TEAM)) * 1.5)
     blue_momentum = 50 + 50 * np.tanh(team_state["blue"]["momentum"] / max(1, len(BLUE_TEAM)) * 1.5)
@@ -520,6 +524,25 @@ html, body {
     font-variant-numeric: tabular-nums;
 }
 
+#scoreboard {
+    position: absolute;
+    bottom: 62px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 5;
+    background: rgba(10, 12, 16, 0.75);
+    border-radius: 10px;
+    padding: 6px 14px;
+    color: #eee;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: .04em;
+    backdrop-filter: blur(4px);
+}
+
+#scoreboard .orange { color: #ff7a00; }
+#scoreboard .blue { color: #4ca6d5; }
+
 #hint {
     position: absolute;
     top: 12px;
@@ -553,8 +576,14 @@ html, body {
 }
 
 #coachPanel .panel-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+#coachPanel .panel-head-right { display: flex; align-items: center; gap: 8px; }
 #coachPanel .eyebrow { color: #8fa8b8; font-size: 9px; letter-spacing: .16em; text-transform: uppercase; }
 #coachPanel .live-dot { color: #73e0a0; font-size: 10px; }
+#coachPanel .toggle-btn { width: 18px; height: 18px; line-height: 16px; padding: 0; font-size: 12px; color: #8fa8b8; background: transparent; border: 1px solid rgba(130,157,177,.35); border-radius: 4px; cursor: pointer; }
+#coachPanel .toggle-btn:hover { color: #e8edf2; border-color: rgba(130,157,177,.6); }
+#coachPanel.collapsed { max-height: none; overflow: visible; padding-bottom: 13px; }
+#coachPanel.collapsed > *:not(.panel-head) { display: none; }
+#coachPanel.collapsed .panel-head { margin-bottom: 0; }
 #coachPanel .signal { margin: 8px 0 10px; padding: 8px; background: rgba(255,255,255,.045); border-left: 3px solid #ff7a00; }
 #coachPanel .signal strong { display: block; color: #fff; font-size: 13px; margin-bottom: 2px; }
 #coachPanel .metric { margin: 8px 0; }
@@ -600,6 +629,7 @@ html, body {
     #coachPanel { top: 8px; right: 8px; width: min(270px, calc(100vw - 16px)); max-height: 46vh; }
     #eventRail { left: 8px; bottom: 70px; max-height: 130px; }
     #hint { display: none; }
+    #scoreboard { font-size: 12px; padding: 5px 10px; }
 }
 </style>
 </head>
@@ -610,7 +640,7 @@ html, body {
 <div id="hud"></div>
 
 <aside id="coachPanel">
-    <div class="panel-head"><span class="eyebrow">Coach console</span><span class="live-dot">● LIVE</span></div>
+    <div class="panel-head"><span class="eyebrow">Coach console</span><span class="panel-head-right"><span class="live-dot">● LIVE</span><button id="coachToggle" class="toggle-btn" title="Hide coach console">&minus;</button></span></div>
     <div class="signal"><strong id="coachSignal">Reading the phase...</strong><span id="coachDetail">Playback-linked team intelligence</span></div>
     <div class="metric"><div class="metric-line"><span>Goal threat</span><b id="threatLabel">--</b></div><div class="bar"><i id="orangeThreat" class="orange"></i><i id="blueThreat" class="blue"></i></div></div>
     <div class="metric"><div class="metric-line"><span>Momentum</span><b id="momentumLabel">--</b></div><div class="bar"><i id="orangeMomentum" class="orange"></i><i id="blueMomentum" class="blue"></i></div></div>
@@ -630,6 +660,10 @@ html, body {
     Drag to orbit &middot; scroll to zoom &middot; right-drag to pan
 </div>
 
+<div id="scoreboard">
+    <span class="orange" id="scoreOrange">ORANGE 0</span>&nbsp;&mdash;&nbsp;<span class="blue" id="scoreBlue">0 BLUE</span>
+</div>
+
 <div id="controls">
     <button id="playBtn">Pause</button>
     <span id="timeLabel">0.0 / 0.0s</span>
@@ -645,6 +679,7 @@ html, body {
     <button id="coverageBtn" class="active">Coverage: On</button>
     <button id="centroidBtn" class="active">Centroid: On</button>
     <button id="pressureBtn" class="active">Pressure: On</button>
+    <button id="fullscreenBtn">Fullscreen</button>
 </div>
 
 <script>
@@ -996,6 +1031,26 @@ function renderEventRail() {
         button.onclick = () => seekTo(event.frame * M.dt);
         list.appendChild(button);
     });
+}
+
+const scoreOrangeEl = document.getElementById("scoreOrange");
+const scoreBlueEl = document.getElementById("scoreBlue");
+
+// Recomputed from scratch each frame from the corrected GOAL events (team
+// labels come straight from the Game Metadata JSON, not from the
+// attack_direction-derived series used by the threat/momentum bars above),
+// so scrubbing/seeking in either direction always lands on the right tally.
+function updateScoreboard(tSec) {
+    const goals = (COACH.events || []).filter(event => event.kind === "GOAL");
+    let orange = 0, blue = 0;
+    goals.forEach(goal => {
+        if (goal.time > tSec) return;
+        const team = String(goal.team || "").toUpperCase();
+        if (team === "ORANGE") orange++;
+        else if (team === "BLUE") blue++;
+    });
+    scoreOrangeEl.textContent = `ORANGE ${orange}`;
+    scoreBlueEl.textContent = `${blue} BLUE`;
 }
 
 function updateCoach(index) {
@@ -1399,6 +1454,9 @@ const followBtn = document.getElementById("followBtn");
 const coverageBtn = document.getElementById("coverageBtn");
 const centroidBtn = document.getElementById("centroidBtn");
 const pressureBtn = document.getElementById("pressureBtn");
+const fullscreenBtn = document.getElementById("fullscreenBtn");
+const coachPanel = document.getElementById("coachPanel");
+const coachToggle = document.getElementById("coachToggle");
 
 let following = false;
 let scrubbing = false;
@@ -1449,6 +1507,31 @@ pressureBtn.onclick = () => {
     pressureBtn.textContent = `Pressure: ${pressureEnabled ? "On" : "Off"}`;
     pressureBtn.classList.toggle("active", pressureEnabled);
 };
+
+coachToggle.onclick = () => {
+    const collapsed = coachPanel.classList.toggle("collapsed");
+    coachToggle.textContent = collapsed ? "+" : "−";
+    coachToggle.title = collapsed ? "Show coach console" : "Hide coach console";
+};
+
+// Fullscreen document.body (not #canvas-wrap) so the HUD/coach panel/event
+// rail/controls, which are siblings of #canvas-wrap rather than nested
+// inside it, stay visible in fullscreen.
+function isFullscreen() {
+    return document.fullscreenElement === document.body;
+}
+
+fullscreenBtn.onclick = () => {
+    if (isFullscreen()) {
+        document.exitFullscreen();
+    } else if (document.body.requestFullscreen) {
+        document.body.requestFullscreen();
+    }
+};
+
+document.addEventListener("fullscreenchange", () => {
+    fullscreenBtn.textContent = isFullscreen() ? "Exit fullscreen" : "Fullscreen";
+});
 
 window.onresize = () => {
     camera.aspect = window.innerWidth / window.innerHeight;
@@ -1519,6 +1602,7 @@ function animate() {
     updateCentroids(ballPos);
     updatePressureField();
     updateCoach(Math.floor(simTime / M.dt));
+    updateScoreboard(simTime);
 
     if (following && ballEntity) {
         const bs = sampleAt(ballEntity, simTime);
