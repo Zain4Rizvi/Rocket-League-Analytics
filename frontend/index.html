@@ -104,6 +104,12 @@
     .legend i { width: 8px; height: 8px; display: inline-block; }
     .error-text { margin-top: 10px; color: #d9604f; font-size: 12px; line-height: 1.5; }
 
+    /* Loading spinner */
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid rgba(255, 113, 56, .3); border-top-color: var(--accent); border-radius: 50%; animation: spin .6s linear infinite; margin-right: 6px; vertical-align: -1px; }
+    .viewer.loading { display: flex; flex-direction: column; justify-content: center; align-items: center; }
+    .viewer.loading .spinner { width: 24px; height: 24px; border-width: 2px; }
+
     @media (max-width: 1100px) {
       .stage { flex-direction: column; }
       .coach { flex: 0 0 300px; }
@@ -234,6 +240,12 @@
       viewer.appendChild(frame);
     }
 
+    function makeSpinner() {
+      const spinner = document.createElement("span");
+      spinner.className = "spinner";
+      return spinner;
+    }
+
     function setStatus(message, type = "") {
       status.textContent = message;
       status.className = `status ${type}`;
@@ -271,8 +283,13 @@
       form.append("replay", file);
       dropZone.classList.remove("is-over");
       setStatus("Processing replay... this can take a moment.", "loading");
-      viewer.className = "viewer empty";
-      viewer.textContent = "Building the interactive simulation...";
+      viewer.className = "viewer loading empty";
+      viewer.innerHTML = "";
+      viewer.appendChild(makeSpinner());
+      const loadingText = document.createElement("p");
+      loadingText.textContent = "Building the interactive simulation...";
+      loadingText.style.marginTop = "12px";
+      viewer.appendChild(loadingText);
       currentStem = null;
       setAskEnabled(false);
       try {
@@ -492,10 +509,17 @@
       askButton.textContent = "...";
       coachBody.innerHTML = "";
 
+      const headingRow = document.createElement("div");
+      headingRow.style.display = "flex";
+      headingRow.style.alignItems = "center";
+      headingRow.style.gap = "8px";
+      headingRow.appendChild(makeSpinner());
       const heading = document.createElement("div");
       heading.className = "section-title";
       heading.textContent = "Running analyses";
-      coachBody.appendChild(heading);
+      heading.style.margin = "0";
+      headingRow.appendChild(heading);
+      coachBody.appendChild(headingRow);
 
       const charts = [];
       let answered = false;
