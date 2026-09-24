@@ -4,7 +4,7 @@ An interactive Rocket League replay analyzer that turns `.replay` files into a 3
 
 **[Live Demo](https://rocket.zainrizvi.ca/)**
 
-![Rocket League Analytics](assets/Example_Scene.png)
+![Rocket League Analytics](assets/Example_Scene.PNG)
 
 ## What It Does
 
