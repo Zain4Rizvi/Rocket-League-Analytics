@@ -1,79 +1,97 @@
 # Rocket League Analytics
 
-A local Rocket League replay analyzer. Upload a `.replay` file, process its player and ball telemetry, and view the match as an interactive 3D simulation in your browser.
+An interactive Rocket League replay analyzer that turns `.replay` files into a 3D match visualization with automated gameplay analysis and AI-powered coaching.
 
-Generated replays include a coaching console with playback-synchronized goal-threat, momentum, and ball-control trends; clickable goal and transition events; player impact reports; boost-economy indicators; and explainable automated review recommendations. These are derived from the replay telemetry and are intended as coaching signals, not official RLCS statistics.
+**[Live Demo](https://rocket.zainrizvi.ca/)**
 
-**Live Demo:** [Rocket League Analytics](https://rocket-league-analytics.onrender.com/)
+![Rocket League Analytics](assets/Example_Scene.png)
 
-## Setup
+## What It Does
 
-Use Python 3.13 or newer. Install the Python dependencies:
+Upload a Rocket League replay and explore the entire match through an interactive 3D simulation.
 
-```powershell
-pip install -r requirements.txt
+The viewer includes:
+
+* **3D Replay Visualization** — Watch the match unfold with player and ball movement, camera controls, and synchronized playback.
+* **Goal & Event Timeline** — Jump between goals and important transitions directly from the replay.
+* **Player Analysis** — Compare positioning, movement, momentum, and overall impact throughout the match.
+* **Boost Analysis** — Track boost usage and identify inefficient boost management.
+* **Gameplay Trends** — View goal-threat, momentum, field-position, and ball-control trends synchronized with the replay.
+* **AI Coach** — Ask questions about the match in natural language and receive explanations backed by the replay's underlying telemetry.
+
+## AI Coaching
+
+The coaching system combines deterministic analysis with an LLM.
+
+Instead of giving the model raw replay data and asking it to interpret everything itself, Python analysis tools calculate the underlying statistics first. The AI then selects the relevant analyses and explains their results.
+
+For example, you can ask:
+
+> "Who managed their boost worst?"
+
+> "Was our positioning the problem?"
+
+> "Talk me through the goals."
+
+The coach can reference specific moments in the match and link them directly to the corresponding point in the 3D replay.
+
+This approach keeps the numerical analysis deterministic while using the LLM primarily for **reasoning, context, and explanation**.
+
+The generated insights are coaching signals derived from replay telemetry, not official RLCS statistics.
+
+## Replay Analysis
+
+The system extracts player and ball telemetry from each replay and uses it to generate features such as:
+
+* Position and movement
+* Speed and momentum
+* Distance from the ball
+* Distance from the goal
+* Boost usage
+* Field positioning
+* Goal-threat trends
+* Match transitions
+
+These features power both the visualizations and the coaching system.
+
+Some gameplay information is not available in the extracted telemetry, such as individual ball touches and demolitions. The coach therefore avoids presenting those as measured facts.
+
+## How It Works
+
+```text
+Rocket League Replay
+        ↓
+   Replay Parser
+        ↓
+  Player / Ball Telemetry
+        ↓
+   Feature Extraction
+        ↓
+ ┌───────────────┬────────────────┐
+ │               │                │
+3D Visualization  Deterministic    AI Coach
+                  Analysis         ↓
+                                   Natural Language
+                                   Explanations
 ```
 
-The replay parser also requires `Scripts/rrrocket.exe`.
-
-To enable the AI coach, set an Anthropic API key before starting the server:
-
-```powershell
-$env:ANTHROPIC_API_KEY = "sk-ant-..."
-```
-
-Without a key everything else still works; the question box reports that coaching is off.
-
-## Run the Website
-
-From the project root:
-
-```powershell
-python .\server.py
-```
-
-Open [http://localhost:8000](http://localhost:8000), then drag and drop a `.replay` file into the upload area. The server saves the replay, runs the processing pipeline, and displays the generated simulation.
-
-## Ask the Coach
-
-With a replay loaded, ask questions in plain English next to the viewer - "who managed their boost worst?", "was our positioning the problem?", "talk me through the goals".
-
-Claude picks from a set of deterministic analyses (boost economy, field position, key moments, match summary), all computed in Python, then explains what they mean. Every number in an answer comes from one of those analyses; the model never estimates. Answers cite moments you can click to jump the 3D view, and include small charts drawn from the same data.
-
-The analyses are runnable on their own, without an API key:
-
-```powershell
-python .\Scripts\replay_analysis.py <replay-stem>
-```
-
-Note that the telemetry contains no ball-touch or demolition data, so the coach deliberately will not discuss touches, challenges or possession as measured facts.
-
-Press `Ctrl+C` in the server terminal to stop it. To use another port:
-
-```powershell
-python .\server.py 8000
-```
-
-## Command-Line Pipeline
-
-To process a replay without the website:
-
-```powershell
-python .\Scripts\run_pipeline.py -i "Replay Data\Raw Replays\match.replay" -o "Replay Data\Replay HTMLs\match.html"
-```
-
-The pipeline creates:
-
-- Parsed telemetry CSV files in `Replay Data/Parsed CSVs`
-- Match metadata JSON files in `Replay Data/Game Metadata`
-- Interactive HTML simulations in `Replay Data/Replay HTMLs`
+The project is built primarily with **Python**, with a browser-based frontend and interactive **Three.js** visualization.
 
 ## Project Structure
 
-- `server.py` - Local upload server and web API
-- `frontend/` - Upload interface
-- `Scripts/Replay to CSV Parser.py` - Replay parsing and telemetry extraction
-- `Scripts/rl_replay_3d.py` - Interactive 3D HTML generation
-- `Scripts/run_pipeline.py` - Runs the parser and visualizer together
-- `Scripts/replay_analysis.py` - Deterministic replay analyses used by the coach
-- `Scripts/coach_agent.py` - LangGraph agent that selects analyses and answers questions
+```text
+├── frontend/                  # Web interface
+├── Scripts/
+│   ├── Replay to CSV Parser.py
+│   ├── rl_replay_3d.py        # 3D replay visualization
+│   ├── run_pipeline.py        # Replay processing pipeline
+│   ├── replay_analysis.py     # Deterministic gameplay analysis
+│   └── coach_agent.py         # AI coaching agent
+└── server.py                  # Backend server
+```
+
+## Demo
+
+Try it with one of your own Rocket League replays:
+
+**[rocket.zainrizvi.ca]**
