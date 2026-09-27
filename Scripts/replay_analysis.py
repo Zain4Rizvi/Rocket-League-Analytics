@@ -196,6 +196,17 @@ def downsample(times, values, limit=120):
     return [[round(float(t), 1), round(float(v), 1)] for t, v in zip(times, values)]
 
 
+def _true_runs(mask):
+    """Return (start_index, end_index) inclusive for each contiguous True run
+    in a boolean array. Shared by any analysis that turns a per-frame boolean
+    condition into discrete episodes."""
+    mask = np.asarray(mask, dtype=bool)
+    if not mask.any():
+        return []
+    edges = np.flatnonzero(np.diff(np.r_[False, mask, False]))
+    return list(zip(edges[0::2].tolist(), (edges[1::2] - 1).tolist()))
+
+
 # ============================================================
 # Goal timeline
 # ============================================================
@@ -510,11 +521,164 @@ def key_moments(stem, start=None, end=None):
     return llm, display
 
 
+# ============================================================
+# Double commits
+# ============================================================
+
+# Both teammates inside this range of the ball counts as contesting the same
+# ball. There is no touch data to confirm a contest actually happened, so this
+# is a distance proxy, same spirit as positioning_report's rank proxy.
+DOUBLE_COMMIT_DISTANCE = 1600.0                   # uu
+DOUBLE_COMMIT_MIN_DURATION = 0.3                  # seconds; drops single-frame noise
+DOUBLE_COMMIT_GOAL_WINDOW = 10.0                  # seconds after the episode starts
+
+
+def double_commit_report(stem, player=None):
+    """Moments when two or more teammates were both near the ball at once.
+
+    Each player's distance to the ball is interpolated onto the ball's own
+    timestamps so teammates can be compared frame-for-frame. A "double commit"
+    is any contiguous stretch of at least DOUBLE_COMMIT_MIN_DURATION seconds
+    where two or more teammates are simultaneously within
+    DOUBLE_COMMIT_DISTANCE of the ball - a proxy for both committing to the
+    same challenge, not a confirmed touch (this replay has no touch data).
+
+    For each episode, checks whether the opposing team scored within
+    DOUBLE_COMMIT_GOAL_WINDOW seconds of it starting, as a rough read on
+    whether the double commit was actually punished. Omit `player` for a
+    lobby-wide breakdown, or pass a name to see only that player's episodes
+    and partners.
+    """
+    context = load_context(stem)
+    target = context.resolve_player(player)
+
+    ball = context.ball
+    ball_times = ball["t"].to_numpy()
+    ball_x = ball["pos_x"].to_numpy()
+    ball_y = ball["pos_y"].to_numpy()
+    # A big gap before a sample means a dead-time cut (goal replay, kickoff
+    # reset); never let a "double commit" run bridge across one.
+    gap_breaks = np.r_[False, np.diff(ball_times) > MAX_SAMPLE_GAP]
+
+    aligned_distance = {}
+    for name in context.players:
+        frame = context.frame_of(name)
+        times = frame["t"].to_numpy()
+        x = np.interp(ball_times, times, frame["pos_x"].to_numpy())
+        y = np.interp(ball_times, times, frame["pos_y"].to_numpy())
+        aligned_distance[name] = np.hypot(x - ball_x, y - ball_y)
+
+    goals = goal_timeline(context)
+
+    episodes = []
+    for team in ("BLUE", "ORANGE"):
+        teammates = [name for name in context.players
+                     if context.team_of.get(name) == team]
+        if len(teammates) < 2:
+            continue
+
+        close = np.vstack([aligned_distance[name] < DOUBLE_COMMIT_DISTANCE
+                           for name in teammates])
+        mask = (close.sum(axis=0) >= 2) & ~gap_breaks
+
+        for start_idx, end_idx in _true_runs(mask):
+            start_t = float(ball_times[start_idx])
+            end_t = float(ball_times[end_idx])
+            if end_t - start_t < DOUBLE_COMMIT_MIN_DURATION:
+                continue
+
+            # Who counts as "in" the double commit: present for at least half
+            # the episode, so a teammate who only clips the edge of the window
+            # isn't credited alongside the two who actually held the commit.
+            presence = close[:, start_idx:end_idx + 1].mean(axis=1)
+            engaged = [teammates[i] for i in range(len(teammates))
+                      if presence[i] >= 0.5]
+            if len(engaged) < 2:
+                order = np.argsort(-presence)
+                engaged = [teammates[i] for i in order[:2]]
+
+            conceded = next(
+                (goal for goal in goals
+                 if goal["team"] != team
+                 and start_t < goal["time"] <= start_t + DOUBLE_COMMIT_GOAL_WINDOW),
+                None,
+            )
+
+            episodes.append({
+                "time": round(start_t, 1),
+                "team": team,
+                "players": engaged,
+                "goal_against": {
+                    "scorer": conceded["scorer"],
+                    "seconds_after": round(conceded["time"] - start_t, 1),
+                } if conceded else None,
+            })
+
+    episodes.sort(key=lambda episode: episode["time"])
+
+    names = [target] if target else context.players
+    player_rows = []
+    for name in names:
+        own = [episode for episode in episodes if name in episode["players"]]
+        partners = {}
+        for episode in own:
+            for other in episode["players"]:
+                if other != name:
+                    partners[other] = partners.get(other, 0) + 1
+        player_rows.append({
+            "name": name,
+            "team": context.team_of.get(name),
+            "double_commit_count": len(own),
+            "with_teammate": partners,
+            "goals_conceded_within_10s": sum(1 for episode in own
+                                             if episode["goal_against"]),
+        })
+
+    relevant = [episode for episode in episodes
+                if not target or target in episode["players"]]
+
+    llm = {
+        "distance_threshold_uu": DOUBLE_COMMIT_DISTANCE,
+        "goal_window_s": DOUBLE_COMMIT_GOAL_WINDOW,
+        "definition": (
+            f"Counted whenever two or more teammates were both within "
+            f"{DOUBLE_COMMIT_DISTANCE:.0f}uu of the ball at the same time - a "
+            "proxy for both committing to the same challenge, not a confirmed "
+            "touch."
+        ),
+        "players": player_rows,
+        "episodes": relevant,
+        "note": (
+            "This replay has no ball-touch data: a double commit here means "
+            "both players were near the ball simultaneously, not that both "
+            "played it. goal_against is only set if the opposing team scored "
+            f"within {DOUBLE_COMMIT_GOAL_WINDOW:.0f}s of the episode starting."
+        ),
+    }
+    display = {
+        "kind": "moments",
+        "title": "Double commits",
+        "items": [
+            {
+                "time": episode["time"],
+                "label": (
+                    f"{' & '.join(episode['players'])} double commit"
+                    + (f" -> goal against {episode['goal_against']['seconds_after']:.0f}s later"
+                       if episode["goal_against"] else "")
+                ),
+            }
+            for episode in relevant
+        ],
+    }
+    return llm, display
+
+
 ANALYSES = {
     "match_summary": match_summary,
     "boost_report": boost_report,
     "positioning_report": positioning_report,
     "key_moments": key_moments,
+    "double_commit_report": double_commit_report,
 }
 
 
