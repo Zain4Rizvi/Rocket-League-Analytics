@@ -52,7 +52,9 @@ Rules:
 - This replay has no ball-touch, demolition or possession data. Do not discuss
   touches, dribbles, challenges or possession as if they were measured.
   The "first/second/third man" figures are a distance-to-ball proxy, not true
-  rotation - say so when you lean on them.
+  rotation - say so when you lean on them. "Double commit" moments are the
+  same kind of proxy: both teammates being within range of the ball at once,
+  not a confirmed contest for it - say so when you lean on them.
 - Use exact player names from the roster below.
 
 Write like a coach talking to a player: lead with the answer, support it with
@@ -142,11 +144,20 @@ def _build_tools(stem, charts):
         windows. Pass `start` and `end` in seconds to focus on a passage."""
         return run(replay_analysis.key_moments, start=start, end=end)
 
+    def double_commit_report(player: Optional[str] = None) -> str:
+        """Double commits: moments where two or more teammates were both close
+        to the ball at once (a distance proxy, not a confirmed contest), how
+        many each player had, which teammate they most often double committed
+        with, and whether the other team scored within 10 seconds afterwards.
+        Omit `player` for the whole lobby."""
+        return run(replay_analysis.double_commit_report, player=player)
+
     return [
         StructuredTool.from_function(match_summary),
         StructuredTool.from_function(boost_report),
         StructuredTool.from_function(positioning_report),
         StructuredTool.from_function(key_moments),
+        StructuredTool.from_function(double_commit_report),
     ]
 
 
@@ -161,6 +172,12 @@ def _candidate_moments(context):
     for event in moments["events"]:
         if event["kind"] != "GOAL":
             candidates.append({"time": event["time"], "what": event["detail"]})
+    commits, _ = replay_analysis.double_commit_report(context.stem)
+    for episode in commits["episodes"]:
+        what = f"{episode['team']} double commit: {' & '.join(episode['players'])}"
+        if episode["goal_against"]:
+            what += " (a goal against followed within 10s)"
+        candidates.append({"time": episode["time"], "what": what})
     candidates.sort(key=lambda item: item["time"])
     return candidates
 
