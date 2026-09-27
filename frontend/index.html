@@ -588,6 +588,7 @@
         asking = false;
         askButton.textContent = "Ask";
         setAskEnabled(Boolean(currentStem));
+        headingRow.remove();          // <-- add this
         coachBody.scrollTop = coachBody.scrollHeight;
       }
     }
