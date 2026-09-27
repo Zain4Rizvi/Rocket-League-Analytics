@@ -58,6 +58,28 @@
     iframe { width: 100%; height: 100%; display: block; border: 0; }
     .loading { color: var(--accent); }
 
+    /* Example badge shown over the viewer while example telemetry is loaded */
+    .example-badge {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      z-index: 3;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 5px 10px;
+      color: #0d1319;
+      background: var(--accent);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      border-radius: 5px;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, .35);
+      pointer-events: none;
+    }
+    .example-badge::before { content: "\25CF"; font-size: 8px; }
+
     /* Coach panel */
     .coach { flex: 0 0 360px; min-height: 0; display: flex; flex-direction: column; position: relative; background: rgba(16, 24, 32, .92); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 10px 30px rgba(0, 0, 0, .22); transition: flex-basis .18s ease; }
     .coach-toggle { position: absolute; top: 10px; left: -13px; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 50%; font-size: 13px; line-height: 1; cursor: pointer; z-index: 2; transition: border-color .18s ease, color .18s ease; }
@@ -137,7 +159,7 @@
     </header>
     <section class="intro">
       <h1>Turn a replay into a match you can inspect.</h1>
-      <p>Drop a replay to prepare its telemetry, open the interactive 3D simulation, then ask the coach what happened.</p>
+      <p>We've preloaded an example match below. Drop your own .replay file anytime to prepare its telemetry, open the interactive 3D simulation, and ask the coach what happened.</p>
     </section>
     <section class="workspace">
       <div class="upload-panel">
@@ -147,7 +169,7 @@
         </label>
         <input id="replayInput" type="file" accept=".replay">
         <button class="example-button" id="exampleButton" type="button">View example</button>
-        <p class="status" id="status">Ready for a replay.</p>
+        <p class="status" id="status">Loading example replay&hellip;</p>
       </div>
       <div class="stage">
         <div class="viewer empty" id="viewer">Your simulation will appear here after processing.</div>
@@ -194,6 +216,7 @@
     let viewerReady = false;
     let pendingSeek = null;
     let asking = false;
+    let showingExample = false;
 
     // The viewer announces itself once its seek listener is installed, so we
     // never post into a frame that has not finished loading.
@@ -228,9 +251,13 @@
       frame.contentWindow.postMessage({ type: "seek", time: seconds }, "*");
     }
 
-    function showSimulation(url) {
+    // `isExample` controls whether the "Example" badge is overlaid on the
+    // viewer, so it's always obvious when the person is looking at preloaded
+    // data rather than a replay they uploaded themselves.
+    function showSimulation(url, isExample = false) {
       viewerReady = false;
       pendingSeek = null;
+      showingExample = isExample;
       viewer.className = "viewer";
       viewer.innerHTML = "";
       const frame = document.createElement("iframe");
@@ -238,6 +265,12 @@
       frame.setAttribute("allow", "fullscreen");
       frame.src = url;
       viewer.appendChild(frame);
+      if (isExample) {
+        const badge = document.createElement("div");
+        badge.className = "example-badge";
+        badge.textContent = "Example replay";
+        viewer.appendChild(badge);
+      }
     }
 
     function makeSpinner() {
@@ -272,6 +305,42 @@
       suggestions.appendChild(button);
     });
 
+    // ---- example -------------------------------------------------------------
+
+    function resetCoach() {
+      coachBody.innerHTML = showingExample
+        ? '<p class="placeholder">You\'re exploring a preloaded example match. Ask about boost, positioning, goals or any moment &mdash; or drop your own replay above to analyze it instead.</p>'
+        : '<p class="placeholder">Ask about boost, positioning, goals or any moment in the match.</p>';
+    }
+
+    async function loadExample({ announce = true } = {}) {
+      if (announce) setStatus("Showing example replay.", "success");
+      showSimulation("/example", true);
+      currentStem = null;
+      setAskEnabled(false);
+      resetCoach();
+      try {
+        const response = await fetch("/api/example");
+        const result = await response.json();
+        if (result.askable) {
+          currentStem = result.stem;
+          setAskEnabled(true);
+        } else {
+          coachBody.innerHTML = '<p class="placeholder">The example viewer is available, but its telemetry is not on this server, so it cannot be questioned. Upload a replay to ask the coach.</p>';
+        }
+      } catch (error) {
+        setAskEnabled(false);
+      }
+    }
+
+    exampleButton.addEventListener("click", () => loadExample());
+
+    // Preload the example on first load so visitors land on a working
+    // simulation instead of an empty viewer. The "Example replay" badge and
+    // status line make clear this isn't an upload of their own.
+    loadExample({ announce: false });
+    setStatus("Showing example replay \u2014 load your own to replace it.", "success");
+
     // ---- upload ------------------------------------------------------------
 
     async function upload(file) {
@@ -291,13 +360,14 @@
       loadingText.style.marginTop = "12px";
       viewer.appendChild(loadingText);
       currentStem = null;
+      showingExample = false;
       setAskEnabled(false);
       try {
         const response = await fetch("/api/upload", { method: "POST", body: form });
         const result = await response.json();
         if (!response.ok) throw new Error(result.details || result.error || "Upload failed.");
         setStatus(`${file.name} is ready.`, "success");
-        showSimulation(result.simulationUrl);
+        showSimulation(result.simulationUrl, false);
         currentStem = result.stem;
         resetCoach();
         setAskEnabled(true);
@@ -307,26 +377,6 @@
         viewer.textContent = "The simulation could not be generated.";
       }
     }
-
-    exampleButton.addEventListener("click", async () => {
-      setStatus("Showing example replay.", "success");
-      showSimulation("/example");
-      currentStem = null;
-      setAskEnabled(false);
-      resetCoach();
-      try {
-        const response = await fetch("/api/example");
-        const result = await response.json();
-        if (result.askable) {
-          currentStem = result.stem;
-          setAskEnabled(true);
-        } else {
-          coachBody.innerHTML = '<p class="placeholder">The example viewer is available, but its telemetry is not on this server, so it cannot be questioned. Upload a replay to ask the coach.</p>';
-        }
-      } catch (error) {
-        setAskEnabled(false);
-      }
-    });
 
     input.addEventListener("change", () => upload(input.files[0]));
     ["dragenter", "dragover"].forEach(eventName => dropZone.addEventListener(eventName, event => {
@@ -340,10 +390,6 @@
     dropZone.addEventListener("drop", event => upload(event.dataTransfer.files[0]));
 
     // ---- asking ------------------------------------------------------------
-
-    function resetCoach() {
-      coachBody.innerHTML = '<p class="placeholder">Ask about boost, positioning, goals or any moment in the match.</p>';
-    }
 
     function escapeHtml(text) {
       return text.replace(/[&<>"']/g, character => ({
