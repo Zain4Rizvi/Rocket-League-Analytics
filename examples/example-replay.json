@@ -1,0 +1,110 @@
+{
+  "match_id": "7532C08041FF55B85A6646A26E7BF28E",
+  "match_guid": "0796B3FA11F0B075259148BF08B19D41",
+  "date": "2025-10-23 20-08-05",
+  "map_name": "Stadium_Foggy_P",
+  "match_type": "Online",
+  "team_scores": {
+    "BLUE": 2,
+    "ORANGE": 3
+  },
+  "BLUE_TEAM": [
+    "gske",
+    "NeoPhantum",
+    "Cryptic"
+  ],
+  "ORANGE_TEAM": [
+    "Life",
+    "Squishy",
+    "Comm"
+  ],
+  "goals": [
+    {
+      "frame": 1045,
+      "player_name": "gske",
+      "team": "BLUE"
+    },
+    {
+      "frame": 4545,
+      "player_name": "Squishy",
+      "team": "ORANGE"
+    },
+    {
+      "frame": 5618,
+      "player_name": "NeoPhantum",
+      "team": "BLUE"
+    },
+    {
+      "frame": 9388,
+      "player_name": "Squishy",
+      "team": "ORANGE"
+    },
+    {
+      "frame": 9804,
+      "player_name": "Life",
+      "team": "ORANGE"
+    }
+  ],
+  "player_stats": [
+    {
+      "name": "gske",
+      "team": "BLUE",
+      "score": 329,
+      "goals": 1,
+      "assists": 0,
+      "saves": 1,
+      "shots": 3,
+      "bBot": false
+    },
+    {
+      "name": "NeoPhantum",
+      "team": "BLUE",
+      "score": 374,
+      "goals": 1,
+      "assists": 0,
+      "saves": 2,
+      "shots": 2,
+      "bBot": false
+    },
+    {
+      "name": "Life",
+      "team": "ORANGE",
+      "score": 364,
+      "goals": 1,
+      "assists": 1,
+      "saves": 1,
+      "shots": 3,
+      "bBot": false
+    },
+    {
+      "name": "Squishy",
+      "team": "ORANGE",
+      "score": 681,
+      "goals": 2,
+      "assists": 1,
+      "saves": 2,
+      "shots": 5,
+      "bBot": false
+    },
+    {
+      "name": "Cryptic",
+      "team": "BLUE",
+      "score": 254,
+      "goals": 0,
+      "assists": 1,
+      "saves": 1,
+      "shots": 5,
+      "bBot": false
+    },
+    {
+      "name": "Comm",
+      "team": "ORANGE",
+      "score": 425,
+      "goals": 0,
+      "assists": 1,
+      "saves": 4,
+      "shots": 1,
+      "bBot": false
+    }
+  ]
+}

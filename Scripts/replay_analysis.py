@@ -32,6 +32,8 @@ import rl_replay_3d
 BASE_DIR = Path(__file__).resolve().parent.parent
 CSV_DIR = BASE_DIR / "Replay Data" / "Parsed CSVs"
 METADATA_DIR = BASE_DIR / "Replay Data" / "Game Metadata"
+EXAMPLE_DIR = BASE_DIR / "examples"
+EXAMPLE_STEM = "example-replay"
 
 FIELD_LENGTH = rl_replay_3d.FIELD_LENGTH          # 10240, y in [-5120, 5120]
 THIRD = FIELD_LENGTH / 6.0                        # +/- 1706.67 marks the thirds
@@ -64,6 +66,14 @@ class ReplayNotFound(Exception):
 def resolve_paths(stem):
     """Resolve a stem to its CSV and metadata paths, refusing path escapes."""
     safe = Path(str(stem)).name
+
+    if safe == EXAMPLE_STEM:
+        csv_path = (EXAMPLE_DIR / f"{safe}.csv").resolve()
+        json_path = (EXAMPLE_DIR / f"{safe}.json").resolve()
+        if not csv_path.exists() or not json_path.exists():
+            raise ReplayNotFound(f"Example replay data missing in {EXAMPLE_DIR}")
+        return csv_path, json_path
+
     csv_path = (CSV_DIR / f"{safe}.csv").resolve()
     json_path = (METADATA_DIR / f"{safe}.json").resolve()
     if csv_path.parent != CSV_DIR.resolve() or json_path.parent != METADATA_DIR.resolve():

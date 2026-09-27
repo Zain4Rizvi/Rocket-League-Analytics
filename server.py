@@ -29,7 +29,7 @@ LOG_DIR = BASE_DIR / "logs"
 MAX_UPLOAD_BYTES = 500 * 1024 * 1024
 MAX_QUESTION_BYTES = 16 * 1024
 
-EXAMPLE_STEM = "265a9dbc-6e9f-471e-bd3a-23cfc6ee8a10"
+EXAMPLE_STEM = "example-replay"
 
 # --- Logging setup -----------------------------------------------------
 # Writes to both stdout (so `docker compose logs -f` shows it live) and a
