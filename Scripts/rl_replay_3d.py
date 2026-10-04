@@ -292,16 +292,28 @@ def build_coaching_analytics(entities, grid, fps, metadata=None):
     }
 
     events = []
-    sample_step = max(1, int(fps * 0.5))
     threat_gap = np.abs(team_state["orange"]["threat"] - team_state["blue"]["threat"])
-    for frame in range(sample_step, frame_count - sample_step, sample_step):
-        local_start = max(0, frame - sample_step)
-        local_end = min(frame_count, frame + sample_step)
-        if threat_gap[frame] >= 42 and threat_gap[frame] == np.max(threat_gap[local_start:local_end]):
+    threat_armed = {"ORANGE": True, "BLUE": True}
+    in_threat_window = False
+    in_transition_window = False
+    for frame in range(frame_count):
+        if ball_y[frame] >= 0:
+            threat_armed["ORANGE"] = True
+        if ball_y[frame] <= 0:
+            threat_armed["BLUE"] = True
+
+        threat_window = threat_gap[frame] >= 42 and abs(ball_y[frame]) <= half_length
+        if threat_window and not in_threat_window:
             team = "ORANGE" if team_state["orange"]["threat"][frame] > team_state["blue"]["threat"][frame] else "BLUE"
-            events.append({"frame": frame, "time": round(float(grid[frame] - grid[0]), 1), "kind": "THREAT", "team": team, "title": f"{team} high-threat window", "detail": f"Goal threat reached {max(team_state['orange']['threat'][frame], team_state['blue']['threat'][frame]):.0f}/100."})
-        if ball_speed[frame] > 2100 and ball_speed[frame] == np.max(ball_speed[local_start:local_end]):
-            events.append({"frame": frame, "time": round(float(grid[frame] - grid[0]), 1), "kind": "TRANSITION", "team": "NEUTRAL", "title": "Fast transition", "detail": f"Ball speed peaked at {ball_speed[frame] / 100:.0f} km/h proxy."})
+            if threat_armed[team]:
+                events.append({"frame": frame, "time": round(float(grid[frame] - grid[0]), 1), "kind": "THREAT", "team": team, "title": f"{team} high-threat window", "detail": f"Goal threat reached {max(team_state['orange']['threat'][frame], team_state['blue']['threat'][frame]):.0f}/100."})
+                threat_armed[team] = False
+        in_threat_window = threat_window
+
+        transition_window = ball_speed[frame] > 2100
+        if transition_window and not in_transition_window:
+            events.append({"frame": frame, "time": round(float(grid[frame] - grid[0]), 1), "kind": "TRANSITION", "team": "NEUTRAL", "title": "Fast transition", "detail": f"Ball speed reached {ball_speed[frame] / 100:.0f} km/h proxy."})
+        in_transition_window = transition_window
 
     if metadata:
         recorded_goals = metadata.get("goals", [])
@@ -669,6 +681,7 @@ html, body {
 </div>
 
 <div id="controls">
+    <button id="seekBackBtn" title="Back 10 seconds" aria-label="Back 10 seconds">-10s</button>
     <button id="playBtn">Pause</button>
     <span id="timeLabel">0.0 / 0.0s</span>
     <input id="scrub" type="range" min="0" max="1000" value="0" />
@@ -684,6 +697,7 @@ html, body {
     <button id="centroidBtn">Centroid: Off</button>
     <button id="pressureBtn" class="active">Pressure: On</button>
     <button id="fullscreenBtn">Fullscreen</button>
+    <button id="seekForwardBtn" title="Forward 10 seconds" aria-label="Forward 10 seconds">+10s</button>
 </div>
 
 <script>
@@ -1451,6 +1465,8 @@ let lastWall = performance.now();
 let speed = 1.0;
 
 const playBtn = document.getElementById("playBtn");
+const seekBackBtn = document.getElementById("seekBackBtn");
+const seekForwardBtn = document.getElementById("seekForwardBtn");
 const scrub = document.getElementById("scrub");
 const timeLabel = document.getElementById("timeLabel");
 const speedSel = document.getElementById("speed");
@@ -1472,6 +1488,9 @@ playBtn.onclick = () => {
     playBtn.textContent = playing ? "Pause" : "Play";
     lastWall = performance.now();
 };
+
+seekBackBtn.onclick = () => seekTo(simTime - 10);
+seekForwardBtn.onclick = () => seekTo(simTime + 10, false);
 
 speedSel.onchange = (e) => {
     speed = parseFloat(e.target.value);
@@ -1628,11 +1647,13 @@ function animate() {
 
 // Jump playback to a point in time. Used by the event rail and by the host
 // page, which posts {type:"seek", time} when a user clicks an AI evidence chip.
-function seekTo(seconds) {
+function seekTo(seconds, pausePlayback = true) {
     simTime = Math.max(0, Math.min(M.duration, Number(seconds) || 0));
     scrub.value = Math.round(simTime / Math.max(0.001, M.duration) * 1000);
-    playing = false;
-    playBtn.textContent = "Play";
+    if (pausePlayback) {
+        playing = false;
+        playBtn.textContent = "Play";
+    }
 }
 
 window.addEventListener("message", (e) => {
