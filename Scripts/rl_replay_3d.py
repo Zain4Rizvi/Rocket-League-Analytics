@@ -579,8 +579,8 @@ html, body {
 #coachPanel .panel-head-right { display: flex; align-items: center; gap: 8px; }
 #coachPanel .eyebrow { color: #8fa8b8; font-size: 9px; letter-spacing: .16em; text-transform: uppercase; }
 #coachPanel .live-dot { color: #73e0a0; font-size: 10px; }
-#coachPanel .toggle-btn { width: 18px; height: 18px; line-height: 16px; padding: 0; font-size: 12px; color: #8fa8b8; background: transparent; border: 1px solid rgba(130,157,177,.35); border-radius: 4px; cursor: pointer; }
-#coachPanel .toggle-btn:hover { color: #e8edf2; border-color: rgba(130,157,177,.6); }
+#coachPanel .toggle-btn, #eventRail .toggle-btn { width: 18px; height: 18px; line-height: 16px; padding: 0; font-size: 12px; color: #8fa8b8; background: transparent; border: 1px solid rgba(130,157,177,.35); border-radius: 4px; cursor: pointer; }
+#coachPanel .toggle-btn:hover, #eventRail .toggle-btn:hover { color: #e8edf2; border-color: rgba(130,157,177,.6); }
 #coachPanel.collapsed { max-height: none; overflow: visible; padding-bottom: 13px; }
 #coachPanel.collapsed > *:not(.panel-head) { display: none; }
 #coachPanel.collapsed .panel-head { margin-bottom: 0; }
@@ -619,7 +619,11 @@ html, body {
     border-radius: 10px;
     backdrop-filter: blur(10px);
 }
-#eventRail .rail-title { color: #8fa8b8; font-size: 9px; letter-spacing: .15em; text-transform: uppercase; margin-bottom: 6px; }
+#eventRail .rail-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+#eventRail .rail-title { color: #8fa8b8; font-size: 9px; letter-spacing: .15em; text-transform: uppercase; }
+#eventRail.collapsed { max-height: none; overflow: visible; }
+#eventRail.collapsed .rail-head { margin-bottom: 0; }
+#eventRail.collapsed #eventList { display: none; }
 #eventList button { width: 100%; display: grid; grid-template-columns: 44px 1fr; gap: 8px; padding: 6px 4px; color: #dce6eb; text-align: left; background: transparent; border: 0; border-top: 1px solid rgba(130,157,177,.14); cursor: pointer; }
 #eventList button:hover { background: rgba(255,255,255,.07); }
 #eventList time { color: #ffad68; font-variant-numeric: tabular-nums; }
@@ -639,8 +643,8 @@ html, body {
 <div id="canvas-wrap"></div>
 <div id="hud"></div>
 
-<aside id="coachPanel">
-    <div class="panel-head"><span class="eyebrow">Coach console</span><span class="panel-head-right"><span class="live-dot">● LIVE</span><button id="coachToggle" class="toggle-btn" title="Hide coach console">&minus;</button></span></div>
+<aside id="coachPanel" class="collapsed">
+    <div class="panel-head"><span class="eyebrow">Coach console</span><span class="panel-head-right"><span class="live-dot">● LIVE</span><button id="coachToggle" class="toggle-btn" title="Show coach console" aria-expanded="false">+</button></span></div>
     <div class="signal"><strong id="coachSignal">Reading the phase...</strong><span id="coachDetail">Playback-linked team intelligence</span></div>
     <div class="metric"><div class="metric-line"><span>Goal threat</span><b id="threatLabel">--</b></div><div class="bar"><i id="orangeThreat" class="orange"></i><i id="blueThreat" class="blue"></i></div></div>
     <div class="metric"><div class="metric-line"><span>Momentum</span><b id="momentumLabel">--</b></div><div class="bar"><i id="orangeMomentum" class="orange"></i><i id="blueMomentum" class="blue"></i></div></div>
@@ -654,7 +658,7 @@ html, body {
     <div id="recommendations"></div>
 </aside>
 
-<section id="eventRail"><div class="rail-title">Replay events · click to jump</div><div id="eventList"></div></section>
+<section id="eventRail" class="collapsed"><div class="rail-head"><div class="rail-title">Replay events · click to jump</div><button id="eventToggle" class="toggle-btn" title="Show replay events" aria-expanded="false">+</button></div><div id="eventList"></div></section>
 
 <div id="hint">
     Drag to orbit &middot; scroll to zoom &middot; right-drag to pan
@@ -1457,6 +1461,8 @@ const pressureBtn = document.getElementById("pressureBtn");
 const fullscreenBtn = document.getElementById("fullscreenBtn");
 const coachPanel = document.getElementById("coachPanel");
 const coachToggle = document.getElementById("coachToggle");
+const eventRail = document.getElementById("eventRail");
+const eventToggle = document.getElementById("eventToggle");
 
 let following = false;
 let scrubbing = false;
@@ -1512,6 +1518,13 @@ coachToggle.onclick = () => {
     const collapsed = coachPanel.classList.toggle("collapsed");
     coachToggle.textContent = collapsed ? "+" : "−";
     coachToggle.title = collapsed ? "Show coach console" : "Hide coach console";
+};
+
+eventToggle.onclick = () => {
+    const collapsed = eventRail.classList.toggle("collapsed");
+    eventToggle.textContent = collapsed ? "+" : "−";
+    eventToggle.title = collapsed ? "Show replay events" : "Hide replay events";
+    eventToggle.setAttribute("aria-expanded", String(!collapsed));
 };
 
 // Fullscreen document.body (not #canvas-wrap) so the HUD/coach panel/event
