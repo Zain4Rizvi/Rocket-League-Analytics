@@ -23,7 +23,6 @@ from typing import Annotated, Any, Optional, TypedDict
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.tools import StructuredTool
-from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
@@ -306,7 +305,7 @@ def answer_question(stem, question, player=None):
 
 def available():
     """Whether the agent can run - lets the server fail helpfully."""
-    return bool(os.environ.get("GEMINI_API_KEY"))
+    return bool(os.environ.get("GROQ_API_KEY"))
 
 
 if __name__ == "__main__":
