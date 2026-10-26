@@ -90,6 +90,12 @@ The project is built primarily with **Python**, with a browser-based frontend an
 └── server.py                  # Backend server
 ```
 
+## Google sign-in (optional)
+
+Set `GOOGLE_CLIENT_ID` in `.env` to a Google Cloud OAuth **Web application** client ID, with authorized JavaScript origins for this site (`http://localhost:8000` locally, plus the production origin). Restart the server.
+
+When that variable is set, a Sign in with Google control appears in the header. Uploads processed while signed in are listed under **History** (match date, time, and 1s/2s/3s). Guests can still upload without signing in; those files are not added to anyone’s history.
+
 ## Demo
 
 Try it with one of your own Rocket League replays:

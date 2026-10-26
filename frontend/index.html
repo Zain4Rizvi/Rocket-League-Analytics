@@ -27,9 +27,30 @@
       font-family: "Segoe UI", Tahoma, sans-serif;
     }
     .shell { height: 100vh; display: flex; flex-direction: column; max-width: 1600px; margin: 0 auto; padding: 0 24px 20px; }
-    header { height: 64px; flex: 0 0 64px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--line); }
+    header { height: 64px; flex: 0 0 64px; display: flex; justify-content: space-between; align-items: center; gap: 16px; border-bottom: 1px solid var(--line); }
+    .brand { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
     .wordmark { color: #fff; font-size: 15px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; }
     .tagline { color: var(--muted); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; }
+    .account { display: none; align-items: center; gap: 8px; position: relative; flex: 0 0 auto; }
+    .account.is-on { display: flex; }
+    .account-name { max-width: 180px; overflow: hidden; color: var(--muted); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+    .history-menu {
+      position: absolute; right: 0; top: calc(100% + 8px); z-index: 20;
+      min-width: 280px; max-height: 320px; overflow-y: auto;
+      padding: 6px; background: var(--panel); border: 1px solid var(--line);
+      border-radius: 8px; box-shadow: 0 12px 30px rgba(0, 0, 0, .4);
+    }
+    .history-item {
+      display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
+      width: 100%; padding: 8px 10px; color: var(--ink); background: transparent;
+      border: 0; border-radius: 6px; font: inherit; font-size: 12px; text-align: left; cursor: pointer;
+    }
+    .history-item:hover { background: #15212b; }
+    .history-item .when { color: var(--ink); }
+    .history-item .mode { color: var(--accent); font-weight: 600; }
+    .history-empty { margin: 0; padding: 10px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+    .history-menu::-webkit-scrollbar { width: 8px; }
+    .history-menu::-webkit-scrollbar-thumb { background: #2c3c48; }
     .intro { display: flex; align-items: baseline; justify-content: space-between; gap: 24px; padding: 16px 0 12px; }
     h1 { margin: 0; color: #fff; font-size: clamp(20px, 2.2vw, 28px); line-height: 1.15; font-weight: 600; letter-spacing: -0.02em; }
     .intro p { max-width: 480px; margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; text-align: right; }
@@ -48,6 +69,7 @@
 
     .example-button:focus-visible,
     .suggestion:focus-visible,
+    .history-item:focus-visible,
     #askButton:focus-visible,
     .chip:focus-visible,
     .coach-toggle:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
@@ -143,6 +165,7 @@
       .shell { padding: 0 12px 12px; }
       header { height: 56px; flex-basis: 56px; }
       .tagline { display: none; }
+      .account-name { display: none; }
       .intro { display: block; padding: 14px 0 12px; }
       .intro p { margin-top: 8px; text-align: left; }
       .upload-panel { align-items: stretch; flex-direction: column; gap: 8px; padding: 10px; }
@@ -154,8 +177,11 @@
 <body>
   <main class="shell">
     <header>
-      <div class="wordmark">Replay Lab</div>
-      <div class="tagline">Rocket League match playback</div>
+      <div class="brand">
+        <div class="wordmark">Replay Lab</div>
+        <div class="tagline">Rocket League match playback</div>
+      </div>
+      <div class="account" id="account"></div>
     </header>
     <section class="intro">
       <h1>Turn a replay into a match you can inspect.</h1>
@@ -202,6 +228,7 @@
     const coachBody = document.getElementById("coachBody");
     const coach = document.getElementById("coach");
     const coachToggle = document.getElementById("coachToggle");
+    const account = document.getElementById("account");
 
     const TEAM_COLORS = { BLUE: "#4ca6d5", ORANGE: "#ff7138" };
     const PALETTE = ["#ff7138", "#4ca6d5", "#70c995", "#e0c15c", "#b07fd0", "#e08a8a"];
@@ -217,6 +244,18 @@
     let pendingSeek = null;
     let asking = false;
     let showingExample = false;
+    let googleClientId = null;
+    let signedIn = null;
+    let historyItems = [];
+    let historyOpen = false;
+    const SESSION_KEY = "rl_session";
+
+    function authHeaders(extra) {
+      const headers = Object.assign({}, extra);
+      const token = localStorage.getItem(SESSION_KEY);
+      if (token) headers.Authorization = "Bearer " + token;
+      return headers;
+    }
 
     // The viewer announces itself once its seek listener is installed, so we
     // never post into a frame that has not finished loading.
@@ -363,14 +402,25 @@
       showingExample = false;
       setAskEnabled(false);
       try {
-        const response = await fetch("/api/upload", { method: "POST", body: form });
+        const response = await fetch("/api/upload", {
+          method: "POST",
+          body: form,
+          credentials: "include",
+          headers: authHeaders()
+        });
         const result = await response.json();
         if (!response.ok) throw new Error(result.details || result.error || "Upload failed.");
-        setStatus(`${file.name} is ready.`, "success");
-        showSimulation(result.simulationUrl, false);
-        currentStem = result.stem;
-        resetCoach();
-        setAskEnabled(true);
+        openReplay(result.stem, result.simulationUrl, `${file.name} is ready.`);
+        if (signedIn && result.stem) {
+          historyItems = [{
+            stem: result.stem,
+            simulationUrl: result.simulationUrl,
+            matchDate: result.matchDate,
+            playlist: result.playlist,
+            uploadedAt: result.uploadedAt
+          }, ...historyItems.filter(item => item.stem !== result.stem)];
+          renderHistoryMenu();
+        }
       } catch (error) {
         setStatus(error.message, "error");
         viewer.className = "viewer empty";
@@ -396,6 +446,180 @@
         "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
       }[character]));
     }
+
+    function openReplay(stem, url, message) {
+      setStatus(message, "success");
+      showSimulation(url, false);
+      currentStem = stem;
+      showingExample = false;
+      resetCoach();
+      setAskEnabled(true);
+    }
+
+    function formatClock(date) {
+      return date.toLocaleString(undefined, {
+        month: "short", day: "numeric", year: "numeric",
+        hour: "numeric", minute: "2-digit"
+      });
+    }
+
+    function formatMatchWhen(raw, uploadedAt) {
+      if (raw) {
+        const match = String(raw).match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2})[-:](\d{2})[-:](\d{2})/);
+        const parsed = match
+          ? new Date(`${match[1]}T${match[2]}:${match[3]}:${match[4]}`)
+          : new Date(raw);
+        if (!Number.isNaN(parsed.getTime())) return formatClock(parsed);
+        return String(raw);
+      }
+      if (uploadedAt) {
+        const parsed = new Date(Number(uploadedAt) * 1000);
+        if (!Number.isNaN(parsed.getTime())) return formatClock(parsed);
+      }
+      return "Unknown date";
+    }
+
+    function renderHistoryMenu() {
+      const menu = document.getElementById("historyMenu");
+      if (!menu) return;
+      menu.hidden = !historyOpen;
+      if (!historyItems.length) {
+        menu.innerHTML = '<p class="history-empty">Uploads you process while signed in show up here.</p>';
+        return;
+      }
+      menu.innerHTML = "";
+      historyItems.forEach(item => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "history-item";
+        button.innerHTML =
+          `<span class="when">${escapeHtml(formatMatchWhen(item.matchDate, item.uploadedAt))}</span>` +
+          `<span class="mode">${escapeHtml(item.playlist || "")}</span>`;
+        button.addEventListener("click", () => {
+          historyOpen = false;
+          renderHistoryMenu();
+          openReplay(item.stem, item.simulationUrl, "Loaded from history.");
+        });
+        menu.appendChild(button);
+      });
+    }
+
+    function renderAccount() {
+      if (!googleClientId) {
+        account.classList.remove("is-on");
+        account.innerHTML = "";
+        return;
+      }
+      account.classList.add("is-on");
+      if (!signedIn) {
+        account.innerHTML = '<div id="gsiButton"></div>';
+        if (window.google && google.accounts && google.accounts.id) {
+          google.accounts.id.renderButton(document.getElementById("gsiButton"), {
+            type: "standard",
+            size: "medium",
+            theme: "filled_black",
+            text: "signin_with",
+            shape: "rectangular"
+          });
+        }
+        return;
+      }
+      account.innerHTML =
+        '<span class="account-name" id="accountName"></span>' +
+        '<button class="example-button" id="historyToggle" type="button">History</button>' +
+        '<div class="history-menu" id="historyMenu" hidden></div>' +
+        '<button class="example-button" id="signOut" type="button">Sign out</button>';
+      document.getElementById("accountName").textContent = signedIn.name || signedIn.email;
+      document.getElementById("historyToggle").addEventListener("click", event => {
+        event.stopPropagation();
+        historyOpen = !historyOpen;
+        renderHistoryMenu();
+      });
+      document.getElementById("historyMenu").addEventListener("click", event => event.stopPropagation());
+      document.getElementById("signOut").addEventListener("click", signOut);
+      renderHistoryMenu();
+    }
+
+    async function loadHistory() {
+      const response = await fetch("/api/history", { credentials: "include", headers: authHeaders() });
+      if (!response.ok) {
+        historyItems = [];
+        renderHistoryMenu();
+        return;
+      }
+      const result = await response.json();
+      historyItems = result.items || [];
+      renderHistoryMenu();
+    }
+
+    async function onGoogleCredential(response) {
+      const result = await fetch("/api/auth/google", {
+        method: "POST",
+        headers: authHeaders({ "Content-Type": "application/json" }),
+        credentials: "include",
+        body: JSON.stringify({ credential: response.credential })
+      });
+      const body = await result.json().catch(() => ({}));
+      if (!result.ok) {
+        setStatus(body.error || "Google sign-in failed.", "error");
+        return;
+      }
+      if (body.session) localStorage.setItem(SESSION_KEY, body.session);
+      signedIn = { email: body.email, name: body.name };
+      historyOpen = false;
+      renderAccount();
+      await loadHistory();
+    }
+
+    async function signOut() {
+      await fetch("/api/auth/logout", { method: "POST", credentials: "include", headers: authHeaders() });
+      localStorage.removeItem(SESSION_KEY);
+      signedIn = null;
+      historyItems = [];
+      historyOpen = false;
+      renderAccount();
+    }
+
+    async function initAuth() {
+      try {
+        const response = await fetch("/api/config");
+        const config = await response.json();
+        googleClientId = config.googleClientId;
+      } catch (error) {
+        return;
+      }
+      if (!googleClientId) return;
+      const script = document.createElement("script");
+      script.src = "https://accounts.google.com/gsi/client";
+      script.async = true;
+      script.onload = async () => {
+        google.accounts.id.initialize({
+          client_id: googleClientId,
+          callback: onGoogleCredential
+        });
+        try {
+          const me = await fetch("/api/me", { credentials: "include", headers: authHeaders() });
+          if (me.ok) {
+            signedIn = await me.json();
+            renderAccount();
+            await loadHistory();
+            return;
+          }
+        } catch (error) {
+          /* stay signed out */
+        }
+        renderAccount();
+      };
+      document.head.appendChild(script);
+    }
+
+    document.addEventListener("click", () => {
+      if (!historyOpen) return;
+      historyOpen = false;
+      renderHistoryMenu();
+    });
+
+    initAuth();
 
     // The coach writes short paragraphs and dash bullets; render just those.
     function renderAnswer(text) {
