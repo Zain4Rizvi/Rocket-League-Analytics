@@ -71,6 +71,16 @@ def safe_stem(filename):
     return cleaned or "replay"
 
 
+def replay_csv_path(stem):
+    """CSV path for a stem, including the bundled example replay."""
+    if stem == EXAMPLE_STEM:
+        return (BASE_DIR / "examples" / f"{EXAMPLE_STEM}.csv").resolve()
+    csv_path = (PARSED_CSV_DIR / f"{stem}.csv").resolve()
+    if csv_path.parent != PARSED_CSV_DIR.resolve():
+        return None
+    return csv_path
+
+
 def json_response(handler, status, payload, extra_headers=None):
     body = json.dumps(payload).encode("utf-8")
     handler.send_response(status)
@@ -358,10 +368,11 @@ class ReplayServer(BaseHTTPRequestHandler):
             return
 
         if parsed.path == "/api/example":
+            example_csv = replay_csv_path(EXAMPLE_STEM)
             json_response(self, 200, {
                 "stem": EXAMPLE_STEM,
                 "simulationUrl": "/example",
-                "askable": (PARSED_CSV_DIR / f"{EXAMPLE_STEM}.csv").exists(),
+                "askable": bool(example_csv and example_csv.exists()),
             })
             return
 
@@ -578,18 +589,18 @@ class ReplayServer(BaseHTTPRequestHandler):
         stem = Path(str(request.get("stem") or "")).name
         logger.info(f"Ask request: stem={stem!r} question={question!r}")
 
-        csv_path = (PARSED_CSV_DIR / f"{stem}.csv").resolve()
-        if csv_path.parent != PARSED_CSV_DIR.resolve() or not csv_path.exists():
+        csv_path = replay_csv_path(stem)
+        if csv_path is None or not csv_path.exists():
             logger.warning(f"Ask rejected: no CSV for stem {stem!r} at {csv_path}")
             json_response(self, 404, {
                 "error": "That replay's data is no longer available. Upload it again."
             })
             return
 
-        if not os.environ.get("GEMINI_API_KEY"):
-            logger.warning("Ask rejected: GEMINI_API_KEY not set in environment")
+        if not os.environ.get("GROQ_API_KEY"):
+            logger.warning("Ask rejected: GROQ_API_KEY not set in environment")
             json_response(self, 503, {
-                "error": "AI coaching is off. Set GEMINI_API_KEY and restart the server."
+                "error": "AI coaching is off. Set GROQ_API_KEY and restart the server."
             })
             return
 
@@ -664,7 +675,7 @@ if __name__ == "__main__":
     logger.info(f"Platform: {platform.platform()}")
     logger.info(f"BASE_DIR: {BASE_DIR}")
     logger.info(f"PORT: {port}")
-    logger.info(f"GEMINI_API_KEY set: {bool(os.environ.get('GEMINI_API_KEY'))}")
+    logger.info(f"GROQ_API_KEY set: {bool(os.environ.get('GROQ_API_KEY'))}")
     logger.info(f"GOOGLE_CLIENT_ID set: {bool(google_client_id())}")
     logger.info(f"LOG_LEVEL: {log_level}")
     logger.info(f"Running in Docker: {Path('/.dockerenv').exists()}")
