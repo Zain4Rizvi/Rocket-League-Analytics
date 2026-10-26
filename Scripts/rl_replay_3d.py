@@ -1203,38 +1203,91 @@ playerSelect.onchange = () => renderPlayerReport(playerSelect.value);
 renderRecommendations();
 renderEventRail();
 
+function catmull(p0, p1, p2, p3, t) {
+    const t2 = t * t;
+    const t3 = t2 * t;
+    return 0.5 * ((2 * p1) +
+        (-p0 + p2) * t +
+        (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 +
+        (-p0 + 3 * p1 - 3 * p2 + p3) * t3);
+}
+
+function unwrapNear(from, to) {
+    let diff = to - from;
+    while (diff > Math.PI) diff -= Math.PI * 2;
+    while (diff < -Math.PI) diff += Math.PI * 2;
+    return from + diff;
+}
+
 function sampleAt(entity, tSec) {
     const frame = tSec / M.dt;
     const n = M.frames;
 
     const i0 = Math.max(0, Math.min(n - 1, Math.floor(frame)));
     const i1 = Math.min(n - 1, i0 + 1);
+    const im1 = Math.max(0, i0 - 1);
+    const i2 = Math.min(n - 1, i0 + 2);
     const frac = Math.min(1, Math.max(0, frame - i0));
 
     const d = entity.def;
-    const lerp = (a, b) => a + (b - a) * frac;
+    const curve = (arr) => catmull(arr[im1], arr[i0], arr[i1], arr[i2], frac);
 
-    const x = lerp(d.x[i0], d.x[i1]);
-    const y = lerp(d.y[i0], d.y[i1]);
-    const z = lerp(d.z[i0], d.z[i1]);
+    const x = curve(d.x);
+    const y = curve(d.y);
+    const z = curve(d.z);
 
     let yaw = null;
     if (d.yaw) {
-        let a = d.yaw[i0];
-        let b = d.yaw[i1];
-        let diff = b - a;
-        if (diff > Math.PI) b -= 2 * Math.PI;
-        if (diff < -Math.PI) b += 2 * Math.PI;
-        yaw = lerp(a, b);
+        const y1 = d.yaw[i0];
+        const y0 = unwrapNear(y1, d.yaw[im1]);
+        const y2 = unwrapNear(y1, d.yaw[i1]);
+        const y3 = unwrapNear(y2, d.yaw[i2]);
+        yaw = catmull(y0, y1, y2, y3, frac);
     }
 
     let boost = null;
     if (d.boost) {
-        boost = lerp(d.boost[i0], d.boost[i1]);
+        boost = d.boost[i0] + (d.boost[i1] - d.boost[i0]) * frac;
     }
 
     return { x, y: z, z: y, yaw, boost, i0, i1, frac };
 }
+
+// ponytail: only bridges holds of <=3 frames under 6000 uu/s. Longer sits and teleports stay cuts.
+function spreadHeldSamples(def) {
+    const n = def.x.length;
+    const x = def.x.slice();
+    const y = def.y.slice();
+    const z = def.z.slice();
+    const yaw = def.yaw ? def.yaw.slice() : null;
+    const moved = (a, b) => Math.hypot(def.x[a] - def.x[b], def.y[a] - def.y[b], def.z[a] - def.z[b]) >= 1;
+    let i = 0;
+    while (i < n - 1) {
+        let j = i + 1;
+        while (j < n && !moved(i, j)) j++;
+        const gap = j - i;
+        if (j < n && gap >= 2 && gap <= 4) {
+            const dist = Math.hypot(def.x[j] - def.x[i], def.y[j] - def.y[i], def.z[j] - def.z[i]);
+            if (dist / (gap * M.dt) <= 6000) {
+                const yawB = yaw ? unwrapNear(def.yaw[i], def.yaw[j]) : 0;
+                for (let k = i + 1; k < j; k++) {
+                    const u = (k - i) / gap;
+                    x[k] = def.x[i] + (def.x[j] - def.x[i]) * u;
+                    y[k] = def.y[i] + (def.y[j] - def.y[i]) * u;
+                    z[k] = def.z[i] + (def.z[j] - def.z[i]) * u;
+                    if (yaw) yaw[k] = def.yaw[i] + (yawB - def.yaw[i]) * u;
+                }
+            }
+        }
+        i = j;
+    }
+    def.x = x;
+    def.y = y;
+    def.z = z;
+    if (yaw) def.yaw = yaw;
+}
+
+for (const en of entities) spreadHeldSamples(en.def);
 
 // ============================================================
 // Coverage Tetrahedrons
