@@ -402,6 +402,9 @@ def build_coaching_analytics(entities, grid, fps, metadata=None):
             goal_frame = min(frame_count - 1, max(0, int(np.searchsorted(grid - grid[0], goal_time))))
             events.append({"frame": goal_frame, "time": round(float(grid[goal_frame] - grid[0]), 1), "kind": "GOAL", "team": goal.get("team", "NEUTRAL"), "title": f"{goal.get('team', 'TEAM')} goal", "detail": f"Scored by {goal.get('player_name', 'unknown player')}."})
     events = sorted(events, key=lambda event: event["frame"])
+    goals = [event for event in events if event["kind"] == "GOAL"]
+    other = [event for event in events if event["kind"] != "GOAL"][:80]
+    events = sorted(goals + other, key=lambda event: event["frame"])
 
     recommendations = []
     for name, report in sorted(player_series.items(), key=lambda item: item[1]["impactPeak"], reverse=True):
@@ -412,7 +415,7 @@ def build_coaching_analytics(entities, grid, fps, metadata=None):
     if not recommendations:
         recommendations.append({"player": "TEAM", "priority": "INFO", "title": "Balanced shape", "detail": "No major automated alert crossed the coaching thresholds in this replay."})
 
-    return {"series": series, "players": player_series, "events": events[:80], "recommendations": recommendations[:12]}
+    return {"series": series, "players": player_series, "events": events, "recommendations": recommendations[:12]}
 
 
 def build_payload(df, fps, metadata=None):
@@ -730,7 +733,7 @@ html, body {
 #eventRail.collapsed { max-height: none; overflow: visible; }
 #eventRail.collapsed .rail-head { margin-bottom: 0; }
 #eventRail.collapsed #eventList { display: none; }
-#eventList button { width: 100%; display: grid; grid-template-columns: 44px 1fr; gap: 8px; padding: 6px 4px; color: #dce6eb; text-align: left; background: transparent; border: 0; border-top: 1px solid rgba(130,157,177,.14); cursor: pointer; }
+#eventList button { width: 100%; display: grid; grid-template-columns: 64px 1fr; gap: 8px; padding: 6px 4px; color: #dce6eb; text-align: left; background: transparent; border: 0; border-top: 1px solid rgba(130,157,177,.14); cursor: pointer; }
 #eventList button:hover { background: rgba(255,255,255,.07); }
 #eventList time { color: #ffad68; font-variant-numeric: tabular-nums; }
 #eventList small { display: block; color: #8296a3; margin-top: 2px; }
@@ -764,7 +767,7 @@ html, body {
     <div id="recommendations"></div>
 </aside>
 
-<section id="eventRail" class="collapsed"><div class="rail-head"><div class="rail-title">Replay events · click to jump</div><button id="eventToggle" class="toggle-btn" title="Show replay events" aria-expanded="false">+</button></div><div id="eventList"></div></section>
+<section id="eventRail" class="collapsed"><div class="rail-head"><div class="rail-title">Goals · click to jump</div><button id="eventToggle" class="toggle-btn" title="Show goals" aria-expanded="false">+</button></div><div id="eventList"></div></section>
 
 <div id="hint">
     Drag to orbit &middot; scroll to zoom &middot; right-drag to pan
@@ -1137,7 +1140,7 @@ function renderRecommendations() {
 function renderEventRail() {
     const list = document.getElementById("eventList");
     list.innerHTML = "";
-    (COACH.events || []).slice(0, 14).forEach(event => {
+    (COACH.events || []).filter(event => event.kind === "GOAL").forEach(event => {
         const button = document.createElement("button");
         const time = document.createElement("time");
         const text = document.createElement("span");
@@ -1857,7 +1860,7 @@ coachToggle.onclick = () => {
 eventToggle.onclick = () => {
     const collapsed = eventRail.classList.toggle("collapsed");
     eventToggle.textContent = collapsed ? "+" : "−";
-    eventToggle.title = collapsed ? "Show replay events" : "Hide replay events";
+    eventToggle.title = collapsed ? "Show goals" : "Hide goals";
     eventToggle.setAttribute("aria-expanded", String(!collapsed));
 };
 

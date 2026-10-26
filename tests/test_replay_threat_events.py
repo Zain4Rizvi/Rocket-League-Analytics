@@ -6,11 +6,11 @@ from Scripts import rl_replay_3d
 
 
 class ReplayThreatEventTests(unittest.TestCase):
-    def build_analytics(self, ball_y, metadata=None):
+    def build_analytics(self, ball_y, metadata=None, ball_x=None):
         fps = 2
         grid = np.arange(len(ball_y), dtype=float) / fps
         entities = [
-            {"type": "ball", "x": [0.0] * len(ball_y), "y": ball_y},
+            {"type": "ball", "x": ball_x if ball_x is not None else [0.0] * len(ball_y), "y": ball_y},
             {
                 "type": "car",
                 "name": "Blue Player",
@@ -72,6 +72,23 @@ class ReplayThreatEventTests(unittest.TestCase):
         self.assertEqual(len(transitions), 1)
         self.assertEqual(transitions[0]["frame"], 3)
         self.assertEqual(transitions[0]["time"], 1.5)
+
+    def test_event_cap_keeps_a_late_goal(self):
+        cycle = [0.0, 0.0, 0.0, 3000.0, 3000.0, 3000.0]
+        ball_x = cycle * 50
+        ball_y = [0.0] * len(ball_x) + [6000.0]
+        ball_x = ball_x + [ball_x[-1]]
+        analytics = self.build_analytics(
+            ball_y,
+            {"goals": [{"frame": len(ball_y) - 1, "player_name": "Blue Player", "team": "BLUE"}]},
+            ball_x=ball_x,
+        )
+
+        goals = [event for event in analytics["events"] if event["kind"] == "GOAL"]
+        others = [event for event in analytics["events"] if event["kind"] != "GOAL"]
+        self.assertEqual(len(goals), 1)
+        self.assertEqual(goals[0]["team"], "BLUE")
+        self.assertEqual(len(others), 80)
 
 
 if __name__ == "__main__":
