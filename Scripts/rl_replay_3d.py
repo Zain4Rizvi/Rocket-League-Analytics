@@ -19,6 +19,7 @@ Features:
 
 Expected CSV columns:
     time,player,actor_id,pos_x,pos_y,pos_z,vel_x,vel_y,vel_z,boost,throttle,steer
+    rot_x,rot_y,rot_z,rot_w are optional; when present they set car heading.
 
 Only time / player / pos_x / pos_y / pos_z are required.
 
@@ -166,6 +167,81 @@ def resample_entity(sub, grid):
         fb = np.interp(grid, t, b, left=b[0], right=b[-1]) / 255.0 * 100.0
 
     return fx, fy, fz, fb
+
+
+# Same menu defaults as the parser. Used when a player has no camera profile.
+CAMERA_DEFAULTS = {
+    "fov": 110.0,
+    "distance": 270.0,
+    "height": 110.0,
+    "angle": -3.0,
+    "stiffness": 0.5,
+    "swivel": 2.5,
+    "transition": 1.0,
+}
+
+
+def yaw_from_quaternion(x, y, z, w):
+    """Heading of the car's local +X axis, in compute_yaw's atan2(dx, dy) convention.
+
+    Checked on a straight-line stretch of a real replay: +X agrees with velocity
+    (median error about 7 degrees above 1000 uu/s). +Y is sideways.
+    """
+    forward_x = 1.0 - 2.0 * (y * y + z * z)
+    forward_y = 2.0 * (x * y + w * z)
+    return math.atan2(forward_x, forward_y)
+
+
+def quaternion_yaw(sub, grid):
+    """Grid heading from rot_x/y/z/w. None when those columns are missing or empty."""
+    cols = ("rot_x", "rot_y", "rot_z", "rot_w")
+    if any(col not in sub.columns for col in cols):
+        return None
+    rot = sub.loc[:, list(cols)].to_numpy(dtype=float)
+    valid = np.isfinite(rot).all(axis=1)
+    if not np.any(valid):
+        return None
+
+    times = sub["time"].to_numpy(dtype=float)[valid]
+    headings = np.unwrap(np.array([
+        yaw_from_quaternion(row[0], row[1], row[2], row[3]) for row in rot[valid]
+    ], dtype=float))
+    order = np.argsort(times, kind="mergesort")
+    times = times[order]
+    headings = headings[order]
+    if len(times) > 1:
+        keep = np.concatenate((np.diff(times) > 0, [True]))
+        times = times[keep]
+        headings = headings[keep]
+    if len(times) == 1:
+        sampled = np.full(len(grid), headings[0])
+    else:
+        sampled = np.interp(grid, times, headings, left=headings[0], right=headings[-1])
+    return (sampled + np.pi) % (2.0 * np.pi) - np.pi
+
+
+def sample_ballcam(events, grid):
+    """Ball-cam flags aligned to grid times. No history means on. Repeats hold."""
+    out = np.ones(len(grid), dtype=int)
+    if not events:
+        return out.tolist()
+    idx = 0
+    current = 1
+    for i, t in enumerate(grid):
+        while idx < len(events) and events[idx][0] <= t:
+            current = 1 if events[idx][1] else 0
+            idx += 1
+        out[i] = current
+    return out.tolist()
+
+
+def camera_for(name, metadata, grid):
+    raw = ((metadata or {}).get("cameras") or {}).get(name) or {}
+    camera = {
+        key: float(raw[key]) if raw.get(key) is not None else default
+        for key, default in CAMERA_DEFAULTS.items()
+    }
+    return camera, sample_ballcam(raw.get("ballcam") or [], grid)
 
 
 def compute_yaw(fx, fy, min_speed=4.0):
@@ -369,7 +445,9 @@ def build_payload(df, fps, metadata=None):
         }
 
         if not is_ball:
-            entry["yaw"] = round_list(compute_yaw(fx, fy), 3)
+            qyaw = quaternion_yaw(sub, grid)
+            entry["yaw"] = round_list(qyaw if qyaw is not None else compute_yaw(fx, fy), 3)
+            entry["camera"], entry["ballcam"] = camera_for(e, metadata, grid)
 
         entry["boost"] = round_list(fb, 1) if fb is not None else None
         payload_entities.append(entry)
@@ -514,6 +592,22 @@ html, body {
 #controls button.active {
     background: #36465f;
     border-color: #5d7092;
+}
+
+#controls select {
+    background: #1c2430;
+    border: 1px solid #354055;
+    color: #eee;
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 11px;
+}
+
+#povState {
+    min-width: 58px;
+    color: #9eb0c3;
+    font-size: 11px;
+    white-space: nowrap;
 }
 
 #scrub {
@@ -693,6 +787,10 @@ html, body {
         <option value="4">4x</option>
     </select>
     <button id="followBtn">Follow Ball: Off</button>
+    <select id="povSelect" title="Player POV. [ and ] cycle.">
+        <option value="">POV: None</option>
+    </select>
+    <span id="povState"></span>
     <button id="coverageBtn">Coverage: Off</button>
     <button id="centroidBtn">Centroid: Off</button>
     <button id="pressureBtn" class="active">Pressure: On</button>
@@ -1509,7 +1607,171 @@ followBtn.onclick = () => {
     following = !following;
     followBtn.textContent = `Follow Ball: ${following ? "On" : "Off"}`;
     followBtn.classList.toggle("active", following);
+    if (following) setPov("");
 };
+
+const povSelect = document.getElementById("povSelect");
+const povState = document.getElementById("povState");
+const DEFAULT_FOV = 55;
+let povName = "";
+let povReady = false;
+let povLastTime = 0;
+let povBall = 1;
+let povYaw = 0;
+const povPos = new THREE.Vector3();
+const povLook = new THREE.Vector3();
+const _car = new THREE.Vector3();
+const _up = new THREE.Vector3(0, 1, 0);
+const _flat = new THREE.Vector3();
+const _ballLook = new THREE.Vector3();
+const _carLook = new THREE.Vector3();
+const _carPosPose = new THREE.Vector3();
+const _ballPosPose = new THREE.Vector3();
+const _desiredPos = new THREE.Vector3();
+const _desiredLook = new THREE.Vector3();
+
+for (const en of entities) {
+    if (en.def.type === "ball") continue;
+    const opt = document.createElement("option");
+    opt.value = en.def.name;
+    opt.textContent = en.def.name;
+    povSelect.appendChild(opt);
+}
+
+function verticalFov(horizontalDeg) {
+    const half = horizontalDeg * Math.PI / 360;
+    const aspect = camera.aspect || (window.innerWidth / window.innerHeight);
+    return 2 * Math.atan(Math.tan(half) / aspect) * 180 / Math.PI;
+}
+
+function applyPovFov() {
+    const en = povName ? entityByName[povName] : null;
+    const horizontal = en && en.def.camera ? en.def.camera.fov : 110;
+    camera.fov = povName ? verticalFov(horizontal) : DEFAULT_FOV;
+    camera.updateProjectionMatrix();
+}
+
+function updatePovLabel() {
+    if (!povName) {
+        povState.textContent = "";
+        return;
+    }
+    const flags = (entityByName[povName] || {}).def;
+    const series = flags && flags.ballcam;
+    if (!series || !series.length) {
+        povState.textContent = "Ball cam";
+        return;
+    }
+    const frame = Math.max(0, Math.min(series.length - 1, Math.floor(simTime / M.dt)));
+    povState.textContent = series[frame] ? "Ball cam" : "Car cam";
+}
+
+function setPov(name) {
+    const next = name || "";
+    if (povName && !next) controls.target.copy(povLook);
+    povName = next;
+    povSelect.value = povName;
+    povReady = false;
+    controls.enabled = !povName;
+    if (povName && following) {
+        following = false;
+        followBtn.textContent = "Follow Ball: Off";
+        followBtn.classList.remove("active");
+    }
+    applyPovFov();
+    updatePovLabel();
+    for (const en of entities) {
+        if (en.label) en.label.sprite.visible = en.def.name !== povName;
+    }
+}
+
+povSelect.onchange = () => setPov(povSelect.value);
+
+window.addEventListener("keydown", (e) => {
+    const tag = e.target && e.target.tagName;
+    if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
+    if (e.key !== "[" && e.key !== "]") return;
+    const choices = [""].concat(entities.filter(en => en.def.type !== "ball").map(en => en.def.name));
+    let index = choices.indexOf(povName);
+    if (index < 0) index = 0;
+    const step = e.key === "]" ? 1 : -1;
+    setPov(choices[(index + step + choices.length) % choices.length]);
+    e.preventDefault();
+});
+
+// ponytail: stiffness/swivel/transition are menu multipliers. The game's
+// interp curve is not in the replay, so this is exponential lag.
+function updatePov(wallDt) {
+    const en = entityByName[povName];
+    if (!en) return;
+    const cam = en.def.camera || {
+        fov: 110, distance: 270, height: 110, angle: -3, stiffness: 0.5, swivel: 2.5, transition: 1
+    };
+    const simDt = scrubbing ? 0 : wallDt * (playing ? speed : 1);
+    const jumped = !povReady || scrubbing || Math.abs(simTime - povLastTime) > Math.max(0.08, simDt + 0.02);
+    const s = sampleAt(en, simTime);
+    const ball = ballEntity ? sampleAt(ballEntity, simTime) : null;
+    const series = en.def.ballcam;
+    const ballOn = !series || !series.length || series[s.i0] !== 0;
+
+    _car.set(s.x, s.y, s.z);
+    const yaw = s.yaw || 0;
+    if (jumped) povYaw = yaw;
+    else {
+        let diff = yaw - povYaw;
+        while (diff > Math.PI) diff -= Math.PI * 2;
+        while (diff < -Math.PI) diff += Math.PI * 2;
+        const swivelRate = 1.5 * (cam.swivel || 2.5);
+        povYaw += diff * (1 - Math.exp(-swivelRate * Math.max(simDt, 0)));
+    }
+
+    const wantBall = ballOn && ball ? 1 : 0;
+    if (jumped) povBall = wantBall;
+    else {
+        const transRate = 6 * (cam.transition || 1);
+        povBall += (wantBall - povBall) * (1 - Math.exp(-transRate * Math.max(simDt, 0)));
+    }
+
+    _flat.set(Math.sin(povYaw), 0, Math.cos(povYaw));
+    const drop = Math.tan(cam.angle * Math.PI / 180) * cam.distance;
+    _carPosPose.copy(_car).addScaledVector(_flat, -cam.distance);
+    _carPosPose.y += cam.height;
+    _carLook.copy(_car).addScaledVector(_flat, 800);
+    _carLook.y = s.y + cam.height + drop;
+
+    if (ball) {
+        _ballLook.set(ball.x, ball.y, ball.z);
+        _flat.set(ball.x - s.x, 0, ball.z - s.z);
+        if (_flat.lengthSq() < 1) _flat.set(Math.sin(povYaw), 0, Math.cos(povYaw));
+        else _flat.normalize();
+        _ballPosPose.copy(_car).addScaledVector(_flat, -cam.distance);
+        _ballPosPose.y += cam.height;
+        _ballLook.y += drop;
+    } else {
+        _ballPosPose.copy(_carPosPose);
+        _ballLook.copy(_carLook);
+    }
+
+    _desiredPos.copy(_carPosPose).lerp(_ballPosPose, povBall);
+    _desiredLook.copy(_carLook).lerp(_ballLook, povBall);
+
+    if (jumped) {
+        povPos.copy(_desiredPos);
+        povLook.copy(_desiredLook);
+        povReady = true;
+    } else {
+        const rate = 4 + (cam.stiffness || 0) * 16;
+        const alpha = 1 - Math.exp(-rate * Math.max(simDt, 0));
+        povPos.lerp(_desiredPos, alpha);
+        povLook.lerp(_desiredLook, alpha);
+    }
+
+    camera.up.set(0, 1, 0);
+    camera.position.copy(povPos);
+    camera.lookAt(povLook);
+    povLastTime = simTime;
+    updatePovLabel();
+}
 
 coverageBtn.onclick = () => {
     const act = !coverage.orange.enabled;
@@ -1567,7 +1829,8 @@ document.addEventListener("fullscreenchange", () => {
 
 window.onresize = () => {
     camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
+    if (povName) applyPovFov();
+    else camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
 };
 
@@ -1636,12 +1899,16 @@ function animate() {
     updateCoach(Math.floor(simTime / M.dt));
     updateScoreboard(simTime);
 
-    if (following && ballEntity) {
+    if (povName) {
+        updatePov(wallDt);
+    } else if (following && ballEntity) {
         const bs = sampleAt(ballEntity, simTime);
         controls.target.set(bs.x, bs.y, bs.z);
+        controls.update();
+    } else {
+        controls.update();
     }
 
-    controls.update();
     renderer.render(scene, camera);
 }
 

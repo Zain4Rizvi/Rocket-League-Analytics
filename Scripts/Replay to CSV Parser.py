@@ -173,6 +173,8 @@ def parse_replay_dict(data: dict) -> pd.DataFrame:
             "boost": st.get("boost"),
             "throttle": st.get("throttle"),
             "steer": st.get("steer"),
+            "rot_x": st.get("rot_x"), "rot_y": st.get("rot_y"),
+            "rot_z": st.get("rot_z"), "rot_w": st.get("rot_w"),
         }
 
     for fr in frames:
@@ -216,6 +218,10 @@ def parse_replay_dict(data: dict) -> pd.DataFrame:
                     target["pos_x"], target["pos_y"], target["pos_z"] = loc["x"], loc["y"], loc["z"]
                     if vel:
                         target["vel_x"], target["vel_y"], target["vel_z"] = vel["x"], vel["y"], vel["z"]
+                    rot = rb.get("rotation")
+                    if rot:
+                        target["rot_x"], target["rot_y"] = rot.get("x"), rot.get("y")
+                        target["rot_z"], target["rot_w"] = rot.get("z"), rot.get("w")
 
             elif oname == "TAGame.CarComponent_Boost_TA:ReplicatedBoost":
                 car_id = boost_comp_to_car.get(aid)
@@ -243,6 +249,8 @@ def parse_replay_dict(data: dict) -> pd.DataFrame:
                 "pos_x": ball_state.get("pos_x"), "pos_y": ball_state.get("pos_y"), "pos_z": ball_state.get("pos_z"),
                 "vel_x": ball_state.get("vel_x"), "vel_y": ball_state.get("vel_y"), "vel_z": ball_state.get("vel_z"),
                 "boost": None, "throttle": None, "steer": None,
+                "rot_x": ball_state.get("rot_x"), "rot_y": ball_state.get("rot_y"),
+                "rot_z": ball_state.get("rot_z"), "rot_w": ball_state.get("rot_w"),
             })
 
     return pd.DataFrame(rows)
@@ -269,6 +277,7 @@ def complete_replay_data(df: pd.DataFrame, min_player_rows: int) -> pd.DataFrame
         "pos_x", "pos_y", "pos_z",
         "vel_x", "vel_y", "vel_z",
         "boost", "throttle", "steer",
+        "rot_x", "rot_y", "rot_z", "rot_w",
     ]
 
     df[telemetry_columns] = df.groupby("player", sort=False)[telemetry_columns].ffill()
@@ -303,6 +312,107 @@ def complete_replay_data(df: pd.DataFrame, min_player_rows: int) -> pd.DataFrame
     return complete_df
 
 
+# Menu defaults, used when a player never replicates a camera profile.
+CAMERA_DEFAULTS = {
+    "fov": 110.0,
+    "distance": 270.0,
+    "height": 110.0,
+    "angle": -3.0,
+    "stiffness": 0.5,
+    "swivel": 2.5,
+    "transition": 1.0,
+}
+
+
+def extract_cameras(data: dict) -> dict:
+    """Per-player camera preset and ball-cam changes.
+
+    Ball cam is ``bUsingSecondaryCamera`` (true = on). The camera actor is
+    respawned every keyframe and its id is reused, so each life is linked to
+    a player through that life's PRI. The player name often arrives later, so
+    names are resolved after the pass.
+    """
+    frames = (data.get("network_frames") or {}).get("frames") or []
+    objects = data.get("objects") or []
+    if not frames:
+        return {}
+
+    pri_names = {}
+    lives = {}
+    by_pri = {}
+
+    def slot(pri):
+        return by_pri.setdefault(pri, {"profile": None, "ballcam": []})
+
+    def note_ballcam(pri, t, flag):
+        events = slot(pri)["ballcam"]
+        bit = 1 if flag else 0
+        if events and events[-1][1] == bit:
+            return
+        events.append([round(float(t), 3), bit])
+
+    def note_profile(pri, settings):
+        cleaned = {
+            key: settings[key]
+            for key in CAMERA_DEFAULTS
+            if settings.get(key) is not None
+        }
+        if not cleaned:
+            return
+        current = slot(pri)["profile"] or {}
+        current.update(cleaned)
+        slot(pri)["profile"] = current
+
+    for fr in frames:
+        t = fr["time"]
+        for na in fr.get("new_actors") or []:
+            if objects[na["object_id"]] == "TAGame.Default__CameraSettingsActor_TA":
+                lives[na["actor_id"]] = {"pri": None, "profile": None, "ball": None}
+        for aid in fr.get("deleted_actors") or []:
+            lives.pop(aid, None)
+        for ua in fr.get("updated_actors") or []:
+            name = objects[ua["object_id"]]
+            aid = ua["actor_id"]
+            attr = ua["attribute"]
+            if name == "Engine.PlayerReplicationInfo:PlayerName":
+                pri_names[aid] = attr.get("String")
+                continue
+            life = lives.get(aid)
+            if life is None or not name.startswith("TAGame.CameraSettingsActor_TA:"):
+                continue
+            kind = name.split(":", 1)[1]
+            if kind == "PRI":
+                pri = (attr.get("ActiveActor") or {}).get("actor")
+                life["pri"] = pri
+                if pri is None:
+                    continue
+                if life["profile"]:
+                    note_profile(pri, life["profile"])
+                if life["ball"] is not None:
+                    note_ballcam(pri, life["ball"][0], life["ball"][1])
+            elif kind == "ProfileSettings":
+                settings = attr.get("CamSettings") or {}
+                life["profile"] = settings
+                if life["pri"] is not None:
+                    note_profile(life["pri"], settings)
+            elif kind == "bUsingSecondaryCamera":
+                flag = bool(attr.get("Boolean"))
+                life["ball"] = (t, flag)
+                if life["pri"] is not None:
+                    note_ballcam(life["pri"], t, flag)
+
+    cameras = {}
+    for pri, info in by_pri.items():
+        name = pri_names.get(pri)
+        if not name:
+            continue
+        profile = dict(CAMERA_DEFAULTS)
+        if info["profile"]:
+            profile.update(info["profile"])
+        cameras[name] = {**profile, "ballcam": info["ballcam"]}
+    return cameras
+
+
 # ============================================================
 # Core Pipeline Execution
 # ============================================================
@@ -314,6 +424,7 @@ def process_replay_in_memory(replay_path: Path, min_player_rows: int):
     """
     json_data = parse_replay_to_json_in_memory(replay_path)
     metadata = extract_game_metadata(json_data)
+    metadata["cameras"] = extract_cameras(json_data)
     raw_df = parse_replay_dict(json_data)
 
     if raw_df is None:
